@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-08 — Keyboard shortcuts added to v1
+
+**Context:** Keyboard accelerators were deferred during Phases 3–8; the user asked to include them in v1.
+**Decision:** Populated the `key_binds` map (`Ctrl+N` New, `Ctrl+O` Open, `Ctrl+S` Save, `Ctrl+Shift+S` Save As) and added a `keyboard::listen()` subscription that maps `KeyPressed` events to `Message::Key`. The handler matches the event against `key_binds` via `KeyBind::matches` (using the base `key` plus `physical_key` fallback) and dispatches the bound action's message. Populating `key_binds` also makes the accelerators display in the File menu.
+**Rationale:** libcosmic does not auto-fire menu `key_binds`; the app must listen for key events and match them itself (the documented pattern; `iced` exposes only `keyboard::listen()`, not `on_key_press`). Matching on the base `key` keeps `Ctrl+Shift+S` working regardless of shift-applied character case.
+**Consequences:** Builds clean and pedantic-clippy-clean. v1 now includes keyboard shortcuts. Not runtime-verified (no display).
+
 ## 2026-06-08 — Phases 7 & 8 complete: i18n & packaging
 
 **Context:** Final polish phases (per `plan.md`) — review localization strings and the AppStream/packaging metadata.

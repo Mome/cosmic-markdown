@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   When it changes externally, the document reloads automatically if there are no
   unsaved edits, or prompts to **keep your changes** or **load from disk** on a
   conflict. The app's own saves are not treated as external changes.
+- Keyboard shortcuts: New (`Ctrl+N`), Open (`Ctrl+O`), Save (`Ctrl+S`), and Save
+  As (`Ctrl+Shift+S`), shown as accelerators in the File menu.
 
 ### Changed
 

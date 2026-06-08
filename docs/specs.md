@@ -60,12 +60,13 @@ document is held in memory as:
 
 Opening a file replaces the current document in place.
 
-Operations:
+Operations (with keyboard shortcuts):
 
-- **New** — create a new, empty document (starts in Source mode).
-- **Open** — open an existing Markdown file via the xdg portal file dialog.
-- **Save** — write the current document to disk; **Save As** for new/untitled
-  documents.
+- **New** (`Ctrl+N`) — create a new, empty document (starts in Source mode).
+- **Open** (`Ctrl+O`) — open an existing Markdown file via the xdg portal file
+  dialog.
+- **Save** (`Ctrl+S`) — write the current document to disk; **Save As**
+  (`Ctrl+Shift+S`) for new/untitled documents.
 
 **Unsaved changes.** When the document is dirty, New, Open, and Quit prompt the
 user to save, discard, or cancel before proceeding.

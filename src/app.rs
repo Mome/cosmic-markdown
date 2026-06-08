@@ -6,8 +6,9 @@ use cosmic::app::context_drawer;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::dialog::file_chooser::{self, FileFilter};
 use cosmic::iced::futures::{SinkExt, Stream};
-use cosmic::iced::{Font, Length, Subscription};
+use cosmic::iced::{Font, Length, Subscription, keyboard};
 use cosmic::prelude::*;
+use cosmic::widget::menu::action::MenuAction as _;
 use cosmic::widget::{self, about::About, markdown, menu, text_editor};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -171,6 +172,8 @@ pub enum Message {
     KeepLocal,
     /// Conflict dialog: discard local edits and load the disk version.
     ReloadFromDisk,
+    /// A keyboard event, matched against the application's key bindings.
+    Key(keyboard::Event),
 }
 
 /// Create a COSMIC application from the app model
@@ -213,7 +216,7 @@ impl cosmic::Application for AppModel {
             core,
             context_page: ContextPage::default(),
             about,
-            key_binds: HashMap::new(),
+            key_binds: key_binds(),
             // Optional configuration file for an application.
             config: cosmic_config::Config::new(Self::APP_ID, Config::VERSION)
                 .map(|context| match Config::get_entry(&context) {
@@ -398,6 +401,8 @@ impl cosmic::Application for AppModel {
             self.core()
                 .watch_config::<Config>(Self::APP_ID)
                 .map(|update| Message::UpdateConfig(update.config)),
+            // Listen for keyboard shortcuts.
+            keyboard::listen().map(Message::Key),
         ];
 
         // Watch the open file for external modifications. Keyed by path, so the
@@ -413,7 +418,7 @@ impl cosmic::Application for AppModel {
     ///
     /// Tasks may be returned for asynchronous execution of code in the background
     /// on the application's async runtime.
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::match_same_arms)]
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
             Message::Edit(action) => {
@@ -536,6 +541,22 @@ impl cosmic::Application for AppModel {
                     self.load_contents(&contents);
                 }
             }
+
+            Message::Key(keyboard::Event::KeyPressed {
+                key,
+                physical_key,
+                modifiers,
+                ..
+            }) => {
+                if let Some(message) = self.key_binds.iter().find_map(|(bind, action)| {
+                    bind.matches(modifiers, &key, Some(&physical_key))
+                        .then(|| action.message())
+                }) {
+                    return self.update(message);
+                }
+            }
+
+            Message::Key(_) => {}
 
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
@@ -680,6 +701,33 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::SaveAs => Message::SaveFileAs,
         }
     }
+}
+
+/// The application's keyboard shortcuts, mapped to menu actions.
+fn key_binds() -> HashMap<menu::KeyBind, MenuAction> {
+    use keyboard::Key;
+    use menu::key_bind::Modifier;
+
+    let mut binds = HashMap::new();
+
+    macro_rules! bind {
+        ([$($modifier:ident),*], $key:expr, $action:ident) => {
+            binds.insert(
+                menu::KeyBind {
+                    modifiers: vec![$(Modifier::$modifier),*],
+                    key: $key,
+                },
+                MenuAction::$action,
+            );
+        };
+    }
+
+    bind!([Ctrl], Key::Character("n".into()), New);
+    bind!([Ctrl], Key::Character("o".into()), Open);
+    bind!([Ctrl], Key::Character("s".into()), Save);
+    bind!([Ctrl, Shift], Key::Character("s".into()), SaveAs);
+
+    binds
 }
 
 /// A file filter matching Markdown documents.
