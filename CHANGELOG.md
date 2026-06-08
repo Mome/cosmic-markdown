@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   dialogs, reading and writing UTF-8. The document's line-ending convention
   (LF/CRLF) is detected on open and preserved on save. File errors are shown in
   a dismissible banner.
+- Unsaved-changes protection: New, Open, and closing the window prompt to
+  **Save**, **Discard**, or **Cancel** when the document has unsaved edits.
 
 ### Changed
 

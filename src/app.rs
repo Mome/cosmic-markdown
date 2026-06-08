@@ -23,6 +23,23 @@ pub enum Mode {
     View,
 }
 
+/// An action deferred until the user resolves unsaved changes.
+#[derive(Clone, Copy, Debug)]
+pub enum PendingAction {
+    /// Start a new, empty document.
+    New,
+    /// Prompt for a file to open.
+    Open,
+    /// Close the application.
+    Quit,
+}
+
+/// A modal dialog shown over the application.
+pub enum Dialog {
+    /// Confirm discarding unsaved changes before performing the pending action.
+    ConfirmDiscard(PendingAction),
+}
+
 /// The line-ending convention of a document, preserved across save.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LineEnding {
@@ -97,6 +114,12 @@ pub struct AppModel {
     markdown: markdown::Content,
     /// A user-facing error message, shown as a dismissible banner.
     error: Option<String>,
+    /// The active modal dialog, if any.
+    dialog: Option<Dialog>,
+    /// An action to run once unsaved changes are resolved (e.g. after saving).
+    pending: Option<PendingAction>,
+    /// Set while the application is closing, to allow the window to close.
+    quitting: bool,
 }
 
 /// Messages emitted by the application and its widgets.
@@ -127,6 +150,14 @@ pub enum Message {
     DialogError(String),
     /// Dismiss the current error banner.
     DismissError,
+    /// The window was asked to close while there are unsaved changes.
+    RequestQuit,
+    /// Confirm dialog: save, then continue the pending action.
+    DialogSave,
+    /// Confirm dialog: discard changes and continue the pending action.
+    DialogDiscard,
+    /// Confirm dialog: cancel the pending action.
+    DialogCancel,
 }
 
 /// Create a COSMIC application from the app model
@@ -180,6 +211,9 @@ impl cosmic::Application for AppModel {
             document: Document::default(),
             markdown: markdown::Content::new(),
             error: None,
+            dialog: None,
+            pending: None,
+            quitting: false,
         };
 
         // Create a startup command that sets the window title.
@@ -260,6 +294,37 @@ impl cosmic::Application for AppModel {
         })
     }
 
+    /// Displays a modal dialog over the application when one is active.
+    fn dialog(&self) -> Option<Element<'_, Self::Message>> {
+        let Some(Dialog::ConfirmDiscard(_)) = &self.dialog else {
+            return None;
+        };
+
+        let dialog = widget::dialog()
+            .title(fl!("unsaved-title"))
+            .body(fl!("unsaved-body"))
+            .primary_action(
+                widget::button::suggested(fl!("save")).on_press(Message::DialogSave),
+            )
+            .secondary_action(
+                widget::button::destructive(fl!("discard")).on_press(Message::DialogDiscard),
+            )
+            .tertiary_action(
+                widget::button::text(fl!("cancel")).on_press(Message::DialogCancel),
+            );
+
+        Some(dialog.into())
+    }
+
+    /// Called when a window requests to close; vetoes the close to prompt when dirty.
+    fn on_close_requested(&self, _id: cosmic::iced::window::Id) -> Option<Self::Message> {
+        if self.quitting || !self.document.dirty {
+            None
+        } else {
+            Some(Message::RequestQuit)
+        }
+    }
+
     /// Describes the interface based on the current state of the application model.
     ///
     /// Application events will be processed through the view. Any messages emitted by
@@ -338,14 +403,11 @@ impl cosmic::Application for AppModel {
             }
 
             Message::New => {
-                self.document = Document::default();
-                self.markdown = markdown::Content::new();
-                self.error = None;
-                return self.update_title();
+                return self.guard_or_perform(PendingAction::New);
             }
 
             Message::OpenFile => {
-                return cosmic::task::future(open_file_dialog());
+                return self.guard_or_perform(PendingAction::Open);
             }
 
             Message::FileOpened(path, contents) => {
@@ -363,12 +425,7 @@ impl cosmic::Application for AppModel {
             }
 
             Message::SaveFile => {
-                let contents = self.document.content.text();
-                let line_ending = self.document.line_ending;
-                if let Some(path) = self.document.path.clone() {
-                    return cosmic::task::future(write_file(path, contents, line_ending));
-                }
-                return cosmic::task::future(save_file_dialog(contents, line_ending));
+                return self.start_save();
             }
 
             Message::SaveFileAs => {
@@ -381,17 +438,46 @@ impl cosmic::Application for AppModel {
                 self.document.path = Some(path);
                 self.document.dirty = false;
                 self.error = None;
+                // If a save was requested as part of a pending action, continue it.
+                if let Some(action) = self.pending.take() {
+                    return self.perform_pending(action);
+                }
                 return self.update_title();
             }
 
-            Message::DialogCancelled => {}
+            Message::DialogCancelled => {
+                // A pending save was cancelled; abort the deferred action.
+                self.pending = None;
+            }
 
             Message::DialogError(why) => {
+                self.pending = None;
                 self.error = Some(why);
             }
 
             Message::DismissError => {
                 self.error = None;
+            }
+
+            Message::RequestQuit => {
+                self.dialog = Some(Dialog::ConfirmDiscard(PendingAction::Quit));
+            }
+
+            Message::DialogSave => {
+                if let Some(Dialog::ConfirmDiscard(action)) = self.dialog.take() {
+                    self.pending = Some(action);
+                    return self.start_save();
+                }
+            }
+
+            Message::DialogDiscard => {
+                if let Some(Dialog::ConfirmDiscard(action)) = self.dialog.take() {
+                    return self.perform_pending(action);
+                }
+            }
+
+            Message::DialogCancel => {
+                self.dialog = None;
             }
 
             Message::ToggleContextPage(context_page) => {
@@ -424,6 +510,47 @@ impl AppModel {
     /// Rebuilds the rendered Markdown from the current source buffer.
     fn reparse_markdown(&mut self) {
         self.markdown = markdown::Content::parse(&self.document.content.text());
+    }
+
+    /// Performs `action` immediately, or prompts to save first when the document
+    /// has unsaved changes.
+    fn guard_or_perform(&mut self, action: PendingAction) -> Task<cosmic::Action<Message>> {
+        if self.document.dirty {
+            self.dialog = Some(Dialog::ConfirmDiscard(action));
+            Task::none()
+        } else {
+            self.perform_pending(action)
+        }
+    }
+
+    /// Carries out a previously deferred action.
+    fn perform_pending(&mut self, action: PendingAction) -> Task<cosmic::Action<Message>> {
+        match action {
+            PendingAction::New => {
+                self.document = Document::default();
+                self.markdown = markdown::Content::new();
+                self.error = None;
+                self.update_title()
+            }
+            PendingAction::Open => cosmic::task::future(open_file_dialog()),
+            PendingAction::Quit => {
+                self.quitting = true;
+                self.core
+                    .main_window_id()
+                    .map_or_else(Task::none, cosmic::iced::window::close)
+            }
+        }
+    }
+
+    /// Saves the current document, prompting for a path if it has none.
+    fn start_save(&mut self) -> Task<cosmic::Action<Message>> {
+        let contents = self.document.content.text();
+        let line_ending = self.document.line_ending;
+        if let Some(path) = self.document.path.clone() {
+            cosmic::task::future(write_file(path, contents, line_ending))
+        } else {
+            cosmic::task::future(save_file_dialog(contents, line_ending))
+        }
     }
 
     /// Updates the header and window titles.

@@ -13,6 +13,12 @@ save-as = Save As…
 # File dialogs
 markdown-files = Markdown files
 
+# Unsaved-changes dialog
+unsaved-title = Unsaved changes
+unsaved-body = This document has unsaved changes. Do you want to save them?
+discard = Discard
+cancel = Cancel
+
 # Editor
 mode-source = Source
 mode-view = View

@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-08 — Phase 5 complete: unsaved-changes prompts
+
+**Context:** Phase 5 (per `plan.md`) — guard New, Open, and Quit against discarding unsaved edits.
+**Decision:** Added a modal confirm dialog (`Application::dialog()` + `widget::dialog()`) with Save/Discard/Cancel. New and Open route through `guard_or_perform`, which shows the dialog when `dirty` and otherwise runs the action via `perform_pending`. Window close is intercepted with `on_close_requested` (returns `RequestQuit` to veto when dirty); a `quitting` flag lets the programmatic `window::close` proceed without re-prompting. Save-then-continue is handled by stashing the deferred action in `pending` and resuming it in the `FileSaved` handler; a cancelled/failed save clears `pending`.
+**Rationale:** `on_close_requested` returning `Some` is libcosmic's documented way to override window closing. Threading the deferred action through `pending` keeps the async save flow simple without nested dialogs.
+**Consequences:** Builds clean and clippy-clean. Quit-veto and dialog modality were validated by code/flow review, not runtime (needs a display). Remaining: Phase 6 (external-change watch), Phase 7 (i18n pass), Phase 8 (packaging), and the deferred keyboard accelerators.
+
 ## 2026-06-08 — Phase 4 complete: file operations
 
 **Context:** Phase 4 (per `plan.md`) — wire Open/Save/Save As, UTF-8 IO, and line-ending preservation.
