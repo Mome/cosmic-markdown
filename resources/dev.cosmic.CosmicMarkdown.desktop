@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Cosmic Markdown
+Comment=A simple markdown viewer/editor for the COSMIC desktop.
+Type=Application
+Icon=dev.cosmic.CosmicMarkdown
+Exec=cosmic-markdown %F
+Terminal=false
+StartupNotify=true
+Categories=Utility;TextEditor;COSMIC;
+Keywords=Markdown;Editor;Viewer;COSMIC;
+MimeType=text/markdown;text/plain;
