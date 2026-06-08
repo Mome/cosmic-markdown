@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   header bar. Source is editable Markdown (`text_editor`); View renders the live
   buffer with the built-in Markdown widget. A **File → New** action starts an
   empty document.
+- File operations: **Open**, **Save**, and **Save As** via the xdg portal file
+  dialogs, reading and writing UTF-8. The document's line-ending convention
+  (LF/CRLF) is detected on open and preserved on save. File errors are shown in
+  a dismissible banner.
 
 ### Changed
 

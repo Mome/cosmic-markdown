@@ -4,6 +4,7 @@ use crate::config::Config;
 use crate::fl;
 use cosmic::app::context_drawer;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
+use cosmic::dialog::file_chooser::{self, FileFilter};
 use cosmic::iced::{Font, Length, Subscription};
 use cosmic::prelude::*;
 use cosmic::widget::{self, about::About, markdown, menu, text_editor};
@@ -22,6 +23,35 @@ pub enum Mode {
     View,
 }
 
+/// The line-ending convention of a document, preserved across save.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LineEnding {
+    /// Unix line endings (`\n`). Default for new documents.
+    Lf,
+    /// Windows line endings (`\r\n`).
+    Crlf,
+}
+
+impl LineEnding {
+    /// Detects the line-ending convention used by some text.
+    fn detect(text: &str) -> Self {
+        if text.contains("\r\n") {
+            Self::Crlf
+        } else {
+            Self::Lf
+        }
+    }
+
+    /// Applies this convention to text whose newlines are normalized to `\n`.
+    fn apply(self, text: String) -> String {
+        match self {
+            Self::Lf => text,
+            // Normalize first so we never produce `\r\r\n`.
+            Self::Crlf => text.replace("\r\n", "\n").replace('\n', "\r\n"),
+        }
+    }
+}
+
 /// The currently open document.
 pub struct Document {
     /// On-disk location, or `None` for a new unsaved document.
@@ -32,6 +62,8 @@ pub struct Document {
     dirty: bool,
     /// The active view mode.
     mode: Mode,
+    /// The line-ending convention to write back on save.
+    line_ending: LineEnding,
 }
 
 impl Default for Document {
@@ -41,6 +73,7 @@ impl Default for Document {
             content: text_editor::Content::new(),
             dirty: false,
             mode: Mode::Source,
+            line_ending: LineEnding::Lf,
         }
     }
 }
@@ -62,6 +95,8 @@ pub struct AppModel {
     document: Document,
     /// Parsed Markdown rendered in View mode; rebuilt from the source buffer.
     markdown: markdown::Content,
+    /// A user-facing error message, shown as a dismissible banner.
+    error: Option<String>,
 }
 
 /// Messages emitted by the application and its widgets.
@@ -76,6 +111,22 @@ pub enum Message {
     SetMode(Mode),
     /// Start a new, empty document.
     New,
+    /// Prompt for a file to open.
+    OpenFile,
+    /// A file was read from disk: its path and contents.
+    FileOpened(PathBuf, String),
+    /// Save the current document (prompting for a path if it has none).
+    SaveFile,
+    /// Save the current document under a newly chosen path.
+    SaveFileAs,
+    /// The document was written to disk at the given path.
+    FileSaved(PathBuf),
+    /// A file dialog was cancelled; no action needed.
+    DialogCancelled,
+    /// A file operation failed; show the message.
+    DialogError(String),
+    /// Dismiss the current error banner.
+    DismissError,
 }
 
 /// Create a COSMIC application from the app model
@@ -128,6 +179,7 @@ impl cosmic::Application for AppModel {
                 .unwrap_or_default(),
             document: Document::default(),
             markdown: markdown::Content::new(),
+            error: None,
         };
 
         // Create a startup command that sets the window title.
@@ -143,7 +195,13 @@ impl cosmic::Application for AppModel {
                 menu::root(fl!("file")).apply(Element::from),
                 menu::items(
                     &self.key_binds,
-                    vec![menu::Item::Button(fl!("new-file"), None, MenuAction::New)],
+                    vec![
+                        menu::Item::Button(fl!("new-file"), None, MenuAction::New),
+                        menu::Item::Button(fl!("open-file"), None, MenuAction::Open),
+                        menu::Item::Divider,
+                        menu::Item::Button(fl!("save"), None, MenuAction::Save),
+                        menu::Item::Button(fl!("save-as"), None, MenuAction::SaveAs),
+                    ],
                 ),
             ),
             menu::Tree::with_children(
@@ -227,7 +285,15 @@ impl cosmic::Application for AppModel {
             .into(),
         };
 
-        widget::container(content)
+        let mut column = widget::column::with_capacity(2).spacing(space_s);
+
+        if let Some(error) = self.error.as_deref() {
+            column = column.push(widget::warning(error).on_close(Message::DismissError));
+        }
+
+        column = column.push(content);
+
+        widget::container(column)
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(space_s)
@@ -274,7 +340,58 @@ impl cosmic::Application for AppModel {
             Message::New => {
                 self.document = Document::default();
                 self.markdown = markdown::Content::new();
+                self.error = None;
                 return self.update_title();
+            }
+
+            Message::OpenFile => {
+                return cosmic::task::future(open_file_dialog());
+            }
+
+            Message::FileOpened(path, contents) => {
+                let line_ending = LineEnding::detect(&contents);
+                self.document = Document {
+                    path: Some(path),
+                    content: text_editor::Content::with_text(&contents),
+                    dirty: false,
+                    mode: Mode::View,
+                    line_ending,
+                };
+                self.reparse_markdown();
+                self.error = None;
+                return self.update_title();
+            }
+
+            Message::SaveFile => {
+                let contents = self.document.content.text();
+                let line_ending = self.document.line_ending;
+                if let Some(path) = self.document.path.clone() {
+                    return cosmic::task::future(write_file(path, contents, line_ending));
+                }
+                return cosmic::task::future(save_file_dialog(contents, line_ending));
+            }
+
+            Message::SaveFileAs => {
+                let contents = self.document.content.text();
+                let line_ending = self.document.line_ending;
+                return cosmic::task::future(save_file_dialog(contents, line_ending));
+            }
+
+            Message::FileSaved(path) => {
+                self.document.path = Some(path);
+                self.document.dirty = false;
+                self.error = None;
+                return self.update_title();
+            }
+
+            Message::DialogCancelled => {}
+
+            Message::DialogError(why) => {
+                self.error = Some(why);
+            }
+
+            Message::DismissError => {
+                self.error = None;
             }
 
             Message::ToggleContextPage(context_page) => {
@@ -353,6 +470,9 @@ pub enum ContextPage {
 pub enum MenuAction {
     About,
     New,
+    Open,
+    Save,
+    SaveAs,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -362,6 +482,66 @@ impl menu::action::MenuAction for MenuAction {
         match self {
             MenuAction::About => Message::ToggleContextPage(ContextPage::About),
             MenuAction::New => Message::New,
+            MenuAction::Open => Message::OpenFile,
+            MenuAction::Save => Message::SaveFile,
+            MenuAction::SaveAs => Message::SaveFileAs,
         }
+    }
+}
+
+/// A file filter matching Markdown documents.
+fn markdown_filter() -> FileFilter {
+    FileFilter::new(&fl!("markdown-files"))
+        .glob("*.md")
+        .glob("*.markdown")
+        .glob("*.mdown")
+        .glob("*.mkd")
+}
+
+/// Prompts for a Markdown file and reads it into memory.
+async fn open_file_dialog() -> Message {
+    let dialog = file_chooser::open::Dialog::new()
+        .title(fl!("open-file"))
+        .filter(markdown_filter());
+
+    match dialog.open_file().await {
+        Ok(response) => match response.url().to_file_path() {
+            Ok(path) => match tokio::fs::read_to_string(&path).await {
+                Ok(contents) => Message::FileOpened(path, contents),
+                Err(why) => {
+                    Message::DialogError(format!("failed to read {}: {why}", path.display()))
+                }
+            },
+            Err(()) => Message::DialogError("selected file is not a local path".into()),
+        },
+        Err(file_chooser::Error::Cancelled) => Message::DialogCancelled,
+        Err(why) => Message::DialogError(why.to_string()),
+    }
+}
+
+/// Prompts for a destination path, then writes the contents there.
+async fn save_file_dialog(contents: String, line_ending: LineEnding) -> Message {
+    let dialog = file_chooser::save::Dialog::new()
+        .title(fl!("save-as"))
+        .filter(markdown_filter());
+
+    match dialog.save_file().await {
+        Ok(response) => match response.url() {
+            Some(url) => match url.to_file_path() {
+                Ok(path) => write_file(path, contents, line_ending).await,
+                Err(()) => Message::DialogError("selected file is not a local path".into()),
+            },
+            None => Message::DialogCancelled,
+        },
+        Err(file_chooser::Error::Cancelled) => Message::DialogCancelled,
+        Err(why) => Message::DialogError(why.to_string()),
+    }
+}
+
+/// Writes `contents` to `path` using the document's line-ending convention.
+async fn write_file(path: PathBuf, contents: String, line_ending: LineEnding) -> Message {
+    match tokio::fs::write(&path, line_ending.apply(contents)).await {
+        Ok(()) => Message::FileSaved(path),
+        Err(why) => Message::DialogError(format!("failed to save {}: {why}", path.display())),
     }
 }

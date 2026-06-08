@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-08 — Phase 4 complete: file operations
+
+**Context:** Phase 4 (per `plan.md`) — wire Open/Save/Save As, UTF-8 IO, and line-ending preservation.
+**Decision:** Added Open/Save/Save As to the File menu, driven by async tasks (`cosmic::task::future`) using the xdg portal dialogs (`file_chooser::open`/`save::Dialog`). Open reads UTF-8 via `tokio::fs::read_to_string` and switches to View; Save writes to the known path or falls back to Save As; both write UTF-8 via `tokio::fs::write`. Added a `LineEnding` (LF/CRLF) detected on open and re-applied on save. File errors surface in a dismissible `widget::warning` banner; cancelled dialogs are no-ops.
+**Rationale:** Mirrors libcosmic's `open-dialog` example. Used ashpd's `FileFilter` (`.glob`) rather than the rfd `.extension` API, since `xdg-portal` is the enabled feature. Keyboard accelerators were deferred (menu items are clickable) to keep the phase focused.
+**Consequences:** Builds clean and clippy-clean. The `dirty` flag is now maintained but not yet acted upon — Phase 5 adds the unsaved-changes prompts (New/Open/Quit) and Phase 6 the external-change watch. Keyboard accelerators (Ctrl+N/O/S) still pending.
+
 ## 2026-06-08 — Phase 2+3 complete: document model, Source/View modes
 
 **Context:** Phases 2 and 3 (per `plan.md`) — add the document/state model and make Source/View visible and toggleable on an in-memory document.

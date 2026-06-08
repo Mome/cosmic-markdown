@@ -6,6 +6,12 @@ repository = Repository
 file = File
 view = View
 new-file = New
+open-file = Open…
+save = Save
+save-as = Save As…
+
+# File dialogs
+markdown-files = Markdown files
 
 # Editor
 mode-source = Source
