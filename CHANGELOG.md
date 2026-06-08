@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- AppStream metainfo: added a description, developer, homepage/bugtracker URLs,
+  Markdown/editor categories and keywords, and a 0.1.0 release entry; corrected
+  the invalid `<binaries>` provides wrapper. Removed an unused localization
+  string. Validates clean with `appstreamcli`.
 - `just install`/`uninstall` now reference the correctly named resource files
   and install the icon under the app-ID name, so the desktop entry's `Icon`
   resolves. Advertised `text/markdown` and `text/plain` MIME types for

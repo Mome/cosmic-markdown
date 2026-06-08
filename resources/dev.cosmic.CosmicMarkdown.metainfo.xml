@@ -4,17 +4,34 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MPL-2.0</project_license>
   <name>Cosmic Markdown</name>
-  <summary>A simple markdown viewer/editor for the COSMIC desktop.</summary>
+  <summary>A simple markdown viewer/editor for the COSMIC desktop</summary>
+  <description>
+    <p>
+      Cosmic Markdown is a lightweight, native Markdown viewer and editor for the
+      COSMIC desktop. It deliberately stays simple and focused.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Edit Markdown source and view the rendered document, toggled from the header bar</li>
+      <li>Open, save, and save-as with native file dialogs</li>
+      <li>Prompts before discarding unsaved changes</li>
+      <li>Detects when the open file changes on disk and offers to reload</li>
+      <li>CommonMark plus tables, task lists, and strikethrough</li>
+    </ul>
+  </description>
+  <developer id="dev.cosmic">
+    <name>Moritz Meier</name>
+  </developer>
   <icon type="remote" width="64" height="64" scale="1">
     https://github.com/mome/cosmic-markdown/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
   </icon>
+  <url type="homepage">https://github.com/mome/cosmic-markdown</url>
   <url type="vcs-browser">https://github.com/mome/cosmic-markdown</url>
+  <url type="bugtracker">https://github.com/mome/cosmic-markdown/issues</url>
   <launchable type="desktop-id">dev.cosmic.CosmicMarkdown.desktop</launchable>
   <provides>
     <id>com.system76.CosmicApplication</id>
-    <binaries>
-      <binary>cosmic-markdown</binary>
-    </binaries>
+    <binary>cosmic-markdown</binary>
   </provides>
   <requires>
     <display_length compare="ge">360</display_length>
@@ -25,11 +42,23 @@
     <control>touch</control>
   </supports>
   <categories>
+    <category>Utility</category>
+    <category>TextEditor</category>
     <category>COSMIC</category>
   </categories>
   <keywords>
+    <keyword>Markdown</keyword>
+    <keyword>Editor</keyword>
+    <keyword>Viewer</keyword>
     <keyword>COSMIC</keyword>
   </keywords>
   <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-06-08">
+      <description>
+        <p>Initial release.</p>
+      </description>
+    </release>
+  </releases>
 </component>
 

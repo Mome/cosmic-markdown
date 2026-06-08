@@ -29,5 +29,3 @@ reload-from-disk = Load from disk
 mode-source = Source
 mode-view = View
 editor-placeholder = Type your Markdown here…
-
-git-description = Git commit {$hash} on {$date}

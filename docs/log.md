@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-08 — Phases 7 & 8 complete: i18n & packaging
+
+**Context:** Final polish phases (per `plan.md`) — review localization strings and the AppStream/packaging metadata.
+**Decision:** Audited `fl!` usage against the `en` Fluent file (all used keys defined; removed the unused `git-description` template leftover). Expanded `dev.cosmic.CosmicMarkdown.metainfo.xml` with a description and feature list, developer tag, homepage/bugtracker URLs, Utility/TextEditor/Markdown categories and keywords, and a 0.1.0 release entry; fixed the invalid `<binaries>` provides wrapper. Verified the desktop file (`desktop-file-validate`) and metainfo (`appstreamcli validate`) both pass.
+**Rationale:** Clean metadata is required for store/Flathub listing and correct desktop integration.
+**Consequences:** v1 is feature-complete with clean packaging metadata. Still outstanding and explicitly deferred: keyboard accelerators (Ctrl+N/O/S), a screenshot in the metainfo (pedantic note), and the v2 items (code highlighting, image rendering). Not yet runtime-verified (no display in the build environment).
+
 ## 2026-06-08 — Phase 6 complete: external-change detection
 
 **Context:** Phase 6 (per `plan.md`) — detect when the open file is modified by another application.
