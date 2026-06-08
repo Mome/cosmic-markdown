@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-08 — Phase 6 complete: external-change detection
+
+**Context:** Phase 6 (per `plan.md`) — detect when the open file is modified by another application.
+**Decision:** Added the `notify` dependency and a `Subscription::run_with(path, …)` file watch, keyed by path so it re-arms on Open/Save As and stops when no file is open. The watcher bridges notify's background-thread events into the async stream via an unbounded channel and emits `FileChangedOnDisk`. On that event the file is re-read; **self-write suppression** is done by comparing the on-disk contents to the buffer (newline-normalized) — equal means our own save or a no-op and is ignored. Otherwise: auto-reload when clean, or a `ConflictReload` dialog (Keep my changes / Load from disk) when dirty.
+**Rationale:** Content comparison is simpler and more robust than mtime bookkeeping and naturally ignores self-writes and no-op touches. The stream is boxed (`Pin<Box<dyn Stream>>`) to avoid the edition-2024 RPIT lifetime capture that would otherwise break the `fn(&D) -> S` builder bound.
+**Consequences:** Builds clean and pedantic-clippy-clean. Known limitation: the watch follows the file directly (inotify), so editors that save via atomic rename-replace may not be tracked after the first replace; watching the parent directory could be added later if needed. v1 feature work is now complete; remaining: Phase 7 (i18n pass), Phase 8 (packaging), and keyboard accelerators.
+
 ## 2026-06-08 — Phase 5 complete: unsaved-changes prompts
 
 **Context:** Phase 5 (per `plan.md`) — guard New, Open, and Quit against discarding unsaved edits.

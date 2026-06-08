@@ -5,11 +5,13 @@ use crate::fl;
 use cosmic::app::context_drawer;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::dialog::file_chooser::{self, FileFilter};
+use cosmic::iced::futures::{SinkExt, Stream};
 use cosmic::iced::{Font, Length, Subscription};
 use cosmic::prelude::*;
 use cosmic::widget::{self, about::About, markdown, menu, text_editor};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::pin::Pin;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -38,6 +40,9 @@ pub enum PendingAction {
 pub enum Dialog {
     /// Confirm discarding unsaved changes before performing the pending action.
     ConfirmDiscard(PendingAction),
+    /// The open file changed on disk while there are unsaved local edits;
+    /// holds the on-disk contents to load if the user chooses to.
+    ConflictReload(String),
 }
 
 /// The line-ending convention of a document, preserved across save.
@@ -158,6 +163,14 @@ pub enum Message {
     DialogDiscard,
     /// Confirm dialog: cancel the pending action.
     DialogCancel,
+    /// The open file changed on disk (from the file watcher).
+    FileChangedOnDisk,
+    /// The on-disk contents were re-read after an external change.
+    ExternalContent(Result<String, String>),
+    /// Conflict dialog: keep the in-memory edits, ignore the disk version.
+    KeepLocal,
+    /// Conflict dialog: discard local edits and load the disk version.
+    ReloadFromDisk,
 }
 
 /// Create a COSMIC application from the app model
@@ -296,22 +309,30 @@ impl cosmic::Application for AppModel {
 
     /// Displays a modal dialog over the application when one is active.
     fn dialog(&self) -> Option<Element<'_, Self::Message>> {
-        let Some(Dialog::ConfirmDiscard(_)) = &self.dialog else {
-            return None;
+        let dialog = match self.dialog.as_ref()? {
+            Dialog::ConfirmDiscard(_) => widget::dialog()
+                .title(fl!("unsaved-title"))
+                .body(fl!("unsaved-body"))
+                .primary_action(
+                    widget::button::suggested(fl!("save")).on_press(Message::DialogSave),
+                )
+                .secondary_action(
+                    widget::button::destructive(fl!("discard")).on_press(Message::DialogDiscard),
+                )
+                .tertiary_action(
+                    widget::button::text(fl!("cancel")).on_press(Message::DialogCancel),
+                ),
+            Dialog::ConflictReload(_) => widget::dialog()
+                .title(fl!("conflict-title"))
+                .body(fl!("conflict-body"))
+                .primary_action(
+                    widget::button::suggested(fl!("reload-from-disk"))
+                        .on_press(Message::ReloadFromDisk),
+                )
+                .secondary_action(
+                    widget::button::standard(fl!("keep-mine")).on_press(Message::KeepLocal),
+                ),
         };
-
-        let dialog = widget::dialog()
-            .title(fl!("unsaved-title"))
-            .body(fl!("unsaved-body"))
-            .primary_action(
-                widget::button::suggested(fl!("save")).on_press(Message::DialogSave),
-            )
-            .secondary_action(
-                widget::button::destructive(fl!("discard")).on_press(Message::DialogDiscard),
-            )
-            .tertiary_action(
-                widget::button::text(fl!("cancel")).on_press(Message::DialogCancel),
-            );
 
         Some(dialog.into())
     }
@@ -372,16 +393,27 @@ impl cosmic::Application for AppModel {
     /// stopped and started conditionally based on application state, or persist
     /// indefinitely.
     fn subscription(&self) -> Subscription<Self::Message> {
-        // Watch for application configuration changes.
-        self.core()
-            .watch_config::<Config>(Self::APP_ID)
-            .map(|update| Message::UpdateConfig(update.config))
+        let mut subscriptions = vec![
+            // Watch for application configuration changes.
+            self.core()
+                .watch_config::<Config>(Self::APP_ID)
+                .map(|update| Message::UpdateConfig(update.config)),
+        ];
+
+        // Watch the open file for external modifications. Keyed by path, so the
+        // watcher is re-armed automatically when the open document changes.
+        if let Some(path) = self.document.path.clone() {
+            subscriptions.push(Subscription::run_with(path, file_watch));
+        }
+
+        Subscription::batch(subscriptions)
     }
 
     /// Handles messages emitted by the application and its widgets.
     ///
     /// Tasks may be returned for asynchronous execution of code in the background
     /// on the application's async runtime.
+    #[allow(clippy::too_many_lines)]
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
             Message::Edit(action) => {
@@ -411,15 +443,9 @@ impl cosmic::Application for AppModel {
             }
 
             Message::FileOpened(path, contents) => {
-                let line_ending = LineEnding::detect(&contents);
-                self.document = Document {
-                    path: Some(path),
-                    content: text_editor::Content::with_text(&contents),
-                    dirty: false,
-                    mode: Mode::View,
-                    line_ending,
-                };
-                self.reparse_markdown();
+                self.document.path = Some(path);
+                self.document.mode = Mode::View;
+                self.load_contents(&contents);
                 self.error = None;
                 return self.update_title();
             }
@@ -476,8 +502,39 @@ impl cosmic::Application for AppModel {
                 }
             }
 
-            Message::DialogCancel => {
+            // Dismiss the active dialog without taking action.
+            Message::DialogCancel | Message::KeepLocal => {
                 self.dialog = None;
+            }
+
+            Message::FileChangedOnDisk => {
+                // Don't interrupt an open dialog; re-read the file otherwise.
+                if self.dialog.is_none()
+                    && let Some(path) = self.document.path.clone()
+                {
+                    return cosmic::task::future(read_external(path));
+                }
+            }
+
+            Message::ExternalContent(Ok(disk)) => {
+                let current = self.document.content.text();
+                if normalized(&disk) == normalized(&current) {
+                    // No real change (e.g. our own save) — ignore.
+                } else if self.document.dirty {
+                    self.dialog = Some(Dialog::ConflictReload(disk));
+                } else {
+                    self.load_contents(&disk);
+                }
+            }
+
+            // A transient read failure (e.g. the file was momentarily removed
+            // during an atomic save) is ignored; the next event will retry.
+            Message::ExternalContent(Err(_)) => {}
+
+            Message::ReloadFromDisk => {
+                if let Some(Dialog::ConflictReload(contents)) = self.dialog.take() {
+                    self.load_contents(&contents);
+                }
             }
 
             Message::ToggleContextPage(context_page) => {
@@ -510,6 +567,15 @@ impl AppModel {
     /// Rebuilds the rendered Markdown from the current source buffer.
     fn reparse_markdown(&mut self) {
         self.markdown = markdown::Content::parse(&self.document.content.text());
+    }
+
+    /// Replaces the document's buffer with `contents`, marking it clean and
+    /// adopting the contents' line-ending convention.
+    fn load_contents(&mut self, contents: &str) {
+        self.document.line_ending = LineEnding::detect(contents);
+        self.document.content = text_editor::Content::with_text(contents);
+        self.document.dirty = false;
+        self.reparse_markdown();
     }
 
     /// Performs `action` immediately, or prompts to save first when the document
@@ -671,4 +737,70 @@ async fn write_file(path: PathBuf, contents: String, line_ending: LineEnding) ->
         Ok(()) => Message::FileSaved(path),
         Err(why) => Message::DialogError(format!("failed to save {}: {why}", path.display())),
     }
+}
+
+/// Re-reads a file after it changed on disk.
+async fn read_external(path: PathBuf) -> Message {
+    Message::ExternalContent(
+        tokio::fs::read_to_string(&path)
+            .await
+            .map_err(|why| why.to_string()),
+    )
+}
+
+/// Normalizes line endings to `\n` for content comparison.
+fn normalized(text: &str) -> String {
+    text.replace("\r\n", "\n")
+}
+
+/// A subscription stream that emits a message whenever `path` changes on disk.
+//
+// `&PathBuf` (not `&Path`) is required to match `Subscription::run_with`'s
+// `fn(&D)` builder signature, where the keying data `D` is a `PathBuf`.
+#[allow(clippy::ptr_arg)]
+fn file_watch(path: &PathBuf) -> Pin<Box<dyn Stream<Item = Message> + Send>> {
+    let path = path.clone();
+
+    Box::pin(cosmic::iced::stream::channel(
+        16,
+        move |mut output: cosmic::iced::futures::channel::mpsc::Sender<Message>| async move {
+        use notify::Watcher;
+
+        // notify invokes its handler on a background thread; forward relevant
+        // events through a channel into this async task.
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let Ok(mut watcher) = notify::recommended_watcher(
+            move |result: notify::Result<notify::Event>| {
+                if let Ok(event) = result
+                    && matches!(
+                        event.kind,
+                        notify::EventKind::Modify(_)
+                            | notify::EventKind::Create(_)
+                            | notify::EventKind::Remove(_)
+                    )
+                {
+                    let _ = tx.send(());
+                }
+            },
+        ) else {
+            return;
+        };
+
+        if watcher
+            .watch(&path, notify::RecursiveMode::NonRecursive)
+            .is_err()
+        {
+            return;
+        }
+
+        while rx.recv().await.is_some() {
+            if output.send(Message::FileChangedOnDisk).await.is_err() {
+                break;
+            }
+        }
+
+        // Keep the watcher alive until the stream ends.
+        drop(watcher);
+        },
+    ))
 }

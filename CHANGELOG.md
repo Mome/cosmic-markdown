@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   a dismissible banner.
 - Unsaved-changes protection: New, Open, and closing the window prompt to
   **Save**, **Discard**, or **Cancel** when the document has unsaved edits.
+- External-change detection: the open file is watched on disk (via `notify`).
+  When it changes externally, the document reloads automatically if there are no
+  unsaved edits, or prompts to **keep your changes** or **load from disk** on a
+  conflict. The app's own saves are not treated as external changes.
 
 ### Changed
 

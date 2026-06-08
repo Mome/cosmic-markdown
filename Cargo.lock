@@ -914,6 +914,7 @@ dependencies = [
  "i18n-embed",
  "i18n-embed-fl",
  "libcosmic",
+ "notify",
  "open",
  "rust-embed",
  "tokio",
