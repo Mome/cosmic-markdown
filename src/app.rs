@@ -483,6 +483,12 @@ impl cosmic::Application for AppModel {
         Some(dialog.into())
     }
 
+    /// Closes the find/replace bar when Escape is pressed.
+    fn on_escape(&mut self) -> Task<cosmic::Action<Self::Message>> {
+        self.search.active = false;
+        Task::none()
+    }
+
     /// Called when a window requests to close; vetoes the close to prompt when dirty.
     fn on_close_requested(&self, _id: cosmic::iced::window::Id) -> Option<Self::Message> {
         if self.quitting || !self.document.dirty {
@@ -500,16 +506,27 @@ impl cosmic::Application for AppModel {
         let space_s = cosmic::theme::spacing().space_s;
 
         let content: Element<_> = match self.document.mode {
-            Mode::Source => widget::text_editor(&self.document.content)
-                .placeholder(fl!("editor-placeholder"))
-                .on_action(Message::Edit)
-                .height(Length::Fill)
-                .padding(space_s)
-                .font(Font::MONOSPACE)
-                .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
-                    source_editor_style,
-                )))
-                .into(),
+            Mode::Source => {
+                // Highlight matches only while the find bar is open.
+                let query = if self.search.active {
+                    self.search.query.clone()
+                } else {
+                    String::new()
+                };
+
+                widget::text_editor(&self.document.content)
+                    .id(editor_id())
+                    .placeholder(fl!("editor-placeholder"))
+                    .on_action(Message::Edit)
+                    .height(Length::Fill)
+                    .padding(space_s)
+                    .font(Font::MONOSPACE)
+                    .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
+                        source_editor_style,
+                    )))
+                    .highlight_with::<SearchHighlighter>(query, search_format)
+                    .into()
+            }
             Mode::View => widget::container(
                 widget::scrollable(
                     markdown::view(self.markdown.items(), markdown_settings())
@@ -547,7 +564,7 @@ impl cosmic::Application for AppModel {
         };
         let padding = [
             f32::from(top),
-            f32::from(space_s),
+            f32::from(space_s - 7),
             f32::from(space_s),
             f32::from(space_s),
         ];
@@ -633,6 +650,10 @@ impl cosmic::Application for AppModel {
                     self.reparse_markdown();
                 }
                 self.document.mode = mode;
+                // Focus the editor when entering Source so the user can type.
+                if mode == Mode::Source {
+                    return focus_editor();
+                }
             }
 
             Message::ToggleHeaderBar => {
@@ -798,13 +819,26 @@ impl cosmic::Application for AppModel {
                 self.document.content.perform(text_editor::Action::SelectAll);
             }
 
-            Message::FindOpen | Message::ReplaceOpen => {
-                self.document.mode = Mode::Source;
-                self.search.active = true;
-                self.search.show_replace = matches!(message, Message::ReplaceOpen);
-                self.recompute_matches();
-                self.select_current_match();
-                return widget::text_input::focus(find_input_id()).map(cosmic::Action::App);
+            Message::FindOpen => {
+                // Toggle off when already showing the find-only bar; otherwise
+                // open/switch to find (collapsing the replace row).
+                if self.search.active && !self.search.show_replace {
+                    self.search.active = false;
+                } else {
+                    self.open_search(false);
+                    return focus_find();
+                }
+            }
+
+            Message::ReplaceOpen => {
+                // Toggle off when already showing replace; otherwise open/switch
+                // to the replace bar.
+                if self.search.active && self.search.show_replace {
+                    self.search.active = false;
+                } else {
+                    self.open_search(true);
+                    return focus_find();
+                }
             }
 
             Message::FindClose => {
@@ -917,6 +951,15 @@ impl AppModel {
     /// Rebuilds the rendered Markdown from the current source buffer.
     fn reparse_markdown(&mut self) {
         self.markdown = markdown::Content::parse(&self.document.content.text());
+    }
+
+    /// Opens (or re-targets) the find bar, optionally with the replace row.
+    fn open_search(&mut self, show_replace: bool) {
+        self.document.mode = Mode::Source;
+        self.search.active = true;
+        self.search.show_replace = show_replace;
+        self.recompute_matches();
+        self.select_current_match();
     }
 
     /// Pushes the current buffer onto the undo stack and clears the redo stack.
@@ -1242,6 +1285,83 @@ impl menu::action::MenuAction for MenuAction {
 /// The widget id of the find query input (for focusing).
 fn find_input_id() -> widget::Id {
     widget::Id::new("cosmic-markdown-find-input")
+}
+
+/// The widget id of the Source editor (for focusing).
+fn editor_id() -> widget::Id {
+    widget::Id::new("cosmic-markdown-editor")
+}
+
+/// A task that focuses the find query input.
+fn focus_find() -> Task<cosmic::Action<Message>> {
+    widget::text_input::focus(find_input_id()).map(cosmic::Action::App)
+}
+
+/// A task that focuses the Source editor.
+fn focus_editor() -> Task<cosmic::Action<Message>> {
+    cosmic::iced::advanced::widget::operate(
+        cosmic::iced::advanced::widget::operation::focusable::focus(editor_id()),
+    )
+}
+
+/// Highlights occurrences of a query string in the editor (recolours matches).
+struct SearchHighlighter {
+    query: String,
+    line: usize,
+}
+
+impl cosmic::iced::advanced::text::Highlighter for SearchHighlighter {
+    type Settings = String;
+    type Highlight = ();
+    type Iterator<'a> = std::vec::IntoIter<(std::ops::Range<usize>, ())>;
+
+    fn new(settings: &Self::Settings) -> Self {
+        Self {
+            query: settings.clone(),
+            line: 0,
+        }
+    }
+
+    fn update(&mut self, new_settings: &Self::Settings) {
+        self.query.clone_from(new_settings);
+        self.line = 0;
+    }
+
+    fn change_line(&mut self, line: usize) {
+        self.line = line;
+    }
+
+    fn highlight_line(&mut self, line: &str) -> Self::Iterator<'_> {
+        let mut ranges = Vec::new();
+        if !self.query.is_empty() {
+            let mut from = 0;
+            while let Some(offset) = line[from..].find(&self.query) {
+                let start = from + offset;
+                let end = start + self.query.len();
+                ranges.push((start..end, ()));
+                from = end.max(start + 1);
+            }
+        }
+        self.line += 1;
+        ranges.into_iter()
+    }
+
+    fn current_line(&self) -> usize {
+        self.line
+    }
+}
+
+/// Maps a search highlight to a distinct text colour (the accent colour).
+// Signature is dictated by `text_editor::highlight_with`'s `fn(&H::Highlight, &Theme)`.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn search_format(
+    _highlight: &(),
+    theme: &cosmic::Theme,
+) -> cosmic::iced::advanced::text::highlighter::Format<cosmic::iced::Font> {
+    cosmic::iced::advanced::text::highlighter::Format {
+        color: Some(cosmic::iced::Color::from(theme.cosmic().accent_color())),
+        font: None,
+    }
 }
 
 /// The application's keyboard shortcuts, mapped to menu actions.

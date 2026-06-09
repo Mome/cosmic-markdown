@@ -59,10 +59,15 @@ cuts, replacements, and whitespace/line boundaries start a new step. History is
 cleared when a document is opened or created and bounded to a fixed number of
 steps.
 
-**Find / Replace.** A find bar (toggled by `Ctrl+F`, or `Ctrl+H` with a replace
-row) searches the buffer for plain-text matches, shows the match count, and
-navigates between matches (Previous/Next), selecting each in the editor. Replace
-substitutes the current match; Replace All substitutes every occurrence.
+**Find / Replace.** A find bar searches the buffer for plain-text matches, shows
+the match count, navigates between matches (Previous/Next), and highlights all
+matches in the editor (recoloured via a custom highlighter, visible regardless
+of editor focus). Replace substitutes the current match; Replace All substitutes
+every occurrence. `Ctrl+F` opens the find bar (and closes it if already showing
+find only); `Ctrl+H` opens it with the replace row (and closes it if already
+showing replace); pressing the other shortcut switches between find-only and
+replace. `Esc` closes the bar. Entering Source mode focuses the editor so the
+user can type immediately.
 
 Both the Source editor and the rendered View are presented on a distinct
 "content" surface so they stand out from the window background.

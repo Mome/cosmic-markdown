@@ -31,9 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - An **Edit** menu with Cut, Copy, Paste, and Select All (active in Source mode).
   The editor also handles the standard `Ctrl+X/C/V/A` shortcuts directly.
 - **Find** (`Ctrl+F`) and **Replace** (`Ctrl+H`): a find bar with match count and
-  Previous/Next navigation (selecting each match), plus Replace and Replace All.
-  Select All now shows its `Ctrl+A` shortcut in the Edit menu; Find/Replace show
-  theirs too.
+  Previous/Next navigation, plus Replace and Replace All. All matches are
+  highlighted in the editor. `Ctrl+F`/`Ctrl+H` toggle the bar closed when already
+  showing that mode, and switch between find and replace otherwise; `Esc` closes
+  it. Select All now shows its `Ctrl+A` shortcut in the Edit menu; Find/Replace
+  show theirs too.
+- Entering Source mode now focuses the editor so you can type right away.
 - **Undo** (`Ctrl+Z`) and **Redo** (`Ctrl+Shift+Z` / `Ctrl+Y`), implemented as an
   application-level history of buffer snapshots (the editor widget has no
   built-in undo). Runs of typing/deletion coalesce into single steps.

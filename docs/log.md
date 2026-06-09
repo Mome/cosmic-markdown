@@ -29,6 +29,13 @@ Format for each entry:
 **Rationale:** `core.window.show_headerbar` is libcosmic's runtime flag for the header bar; flipping it re-renders without it. Since hiding the header also hides the menus and the mode toggle, the keyboard shortcut is essential to restore it.
 **Consequences:** Builds clean and pedantic-clippy-clean.
 
+## 2026-06-09 — Find/replace refinements: highlight, toggle, Esc, focus
+
+**Context:** User feedback on find/replace: focus the editor on entering edit mode; highlight matches; `Ctrl+F`/`Ctrl+H` should toggle the bar closed and switch find↔replace; `Esc` closes.
+**Decision:** (1) `ToggleMode`→Source returns a `focus_editor()` task (focuses the editor by id via `operate(focusable::focus(...))`). (2) Match highlighting: implemented a `SearchHighlighter` (`text_editor::highlight_with`) that recolours occurrences of the query in the accent colour — chosen because the stock editor only draws its *selection* when focused (so the find bar holding focus left the current-match selection invisible), whereas the highlighter is focus-independent and shows all matches. (3) `FindOpen`/`ReplaceOpen` now toggle off when already in that mode and switch between find-only and replace otherwise. (4) `on_escape` closes the bar.
+**Rationale:** `highlight_with` is not feature-gated and needs no widget fork. Recolouring (not background highlighting) is the only option since `highlighter::Format` carries colour/font, not a background.
+**Consequences:** Builds clean and pedantic-clippy-clean. Limitations: the *current* match isn't visually distinct from the others while the find bar is focused (all matches share the accent colour; the current match is additionally selected, visible only when the editor regains focus); highlighting is plain-text/byte-offset based like the matches.
+
 ## 2026-06-09 — Undo / Redo (application-level history)
 
 **Context:** Add undo/redo with shortcuts. The earlier decision (Phase 6 / Edit-menu) deferred them because the stock cosmic `text_editor` exposes no undo action; the user now wants them.
