@@ -13,6 +13,7 @@ use cosmic::widget::{self, about::About, markdown, menu, text_editor};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::Arc;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -174,6 +175,16 @@ pub enum Message {
     ReloadFromDisk,
     /// A keyboard event, matched against the application's key bindings.
     Key(keyboard::Event),
+    /// Cut the editor selection to the clipboard.
+    Cut,
+    /// Copy the editor selection to the clipboard.
+    Copy,
+    /// Paste clipboard contents into the editor.
+    Paste,
+    /// Clipboard contents to paste (from an async read).
+    Pasted(Option<String>),
+    /// Select all text in the editor.
+    SelectAll,
 }
 
 /// Create a COSMIC application from the app model
@@ -240,6 +251,15 @@ impl cosmic::Application for AppModel {
 
     /// Elements to pack at the start of the header bar.
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
+        // Edit actions operate on the Source editor, so disable them in View mode.
+        let edit_item = |label: String, action: MenuAction| {
+            if self.document.mode == Mode::Source {
+                menu::Item::Button(label, None, action)
+            } else {
+                menu::Item::ButtonDisabled(label, None, action)
+            }
+        };
+
         let menu_bar = menu::bar(vec![
             menu::Tree::with_children(
                 menu::root(fl!("file")).apply(Element::from),
@@ -255,13 +275,29 @@ impl cosmic::Application for AppModel {
                 ),
             ),
             menu::Tree::with_children(
+                menu::root(fl!("edit")).apply(Element::from),
+                menu::items(
+                    &self.key_binds,
+                    vec![
+                        edit_item(fl!("cut"), MenuAction::Cut),
+                        edit_item(fl!("copy"), MenuAction::Copy),
+                        edit_item(fl!("paste"), MenuAction::Paste),
+                        menu::Item::Divider,
+                        edit_item(fl!("select-all"), MenuAction::SelectAll),
+                    ],
+                ),
+            ),
+            menu::Tree::with_children(
                 menu::root(fl!("view")).apply(Element::from),
                 menu::items(
                     &self.key_binds,
                     vec![menu::Item::Button(fl!("about"), None, MenuAction::About)],
                 ),
             ),
-        ]);
+        ])
+        .item_height(menu::ItemHeight::Dynamic(40))
+        .item_width(menu::ItemWidth::Uniform(240))
+        .spacing(4.0);
 
         vec![menu_bar.into()]
     }
@@ -367,11 +403,17 @@ impl cosmic::Application for AppModel {
                     source_editor_style,
                 )))
                 .into(),
-            Mode::View => widget::scrollable(
-                markdown::view(self.markdown.items(), markdown_settings())
-                    .map(Message::LaunchUrl),
+            Mode::View => widget::container(
+                widget::scrollable(
+                    markdown::view(self.markdown.items(), markdown_settings())
+                        .map(Message::LaunchUrl),
+                )
+                .spacing(space_s)
+                .width(Length::Fill)
+                .height(Length::Fill),
             )
-            .spacing(space_s)
+            .class(cosmic::theme::Container::Custom(Box::new(surface_style)))
+            .padding(space_s)
             .width(Length::Fill)
             .height(Length::Fill)
             .into(),
@@ -561,6 +603,44 @@ impl cosmic::Application for AppModel {
 
             Message::Key(_) => {}
 
+            Message::Copy => {
+                if let Some(selection) = self.document.content.selection() {
+                    return cosmic::iced::clipboard::write(selection);
+                }
+            }
+
+            Message::Cut => {
+                if let Some(selection) = self.document.content.selection() {
+                    self.document
+                        .content
+                        .perform(text_editor::Action::Edit(text_editor::Edit::Delete));
+                    self.document.dirty = true;
+                    self.reparse_markdown();
+                    return cosmic::iced::clipboard::write(selection);
+                }
+            }
+
+            Message::Paste => {
+                return cosmic::iced::clipboard::read()
+                    .map(|contents| cosmic::Action::App(Message::Pasted(contents)));
+            }
+
+            Message::Pasted(Some(text)) => {
+                self.document
+                    .content
+                    .perform(text_editor::Action::Edit(text_editor::Edit::Paste(
+                        Arc::new(text),
+                    )));
+                self.document.dirty = true;
+                self.reparse_markdown();
+            }
+
+            Message::Pasted(None) => {}
+
+            Message::SelectAll => {
+                self.document.content.perform(text_editor::Action::SelectAll);
+            }
+
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     // Close the context drawer if the toggled context page is the same.
@@ -698,6 +778,24 @@ fn source_editor_style(
     }
 }
 
+/// Styles a container as the same input surface as the Source editor, so the
+/// rendered View matches the editor's appearance.
+fn surface_style(theme: &cosmic::Theme) -> cosmic::widget::container::Style {
+    use cosmic::iced::{Border, Color};
+
+    let cosmic = theme.cosmic();
+
+    cosmic::widget::container::Style {
+        background: Some(Color::from(cosmic.primary_container_color()).into()),
+        border: Border {
+            radius: cosmic.corner_radii.radius_s.into(),
+            width: 1.0,
+            color: Color::from(cosmic.primary_container_divider()),
+        },
+        ..Default::default()
+    }
+}
+
 /// Builds Markdown render settings from the active COSMIC theme (light/dark).
 fn markdown_settings() -> markdown::Settings {
     let theme = if cosmic::theme::is_dark() {
@@ -722,6 +820,10 @@ pub enum MenuAction {
     Open,
     Save,
     SaveAs,
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -734,6 +836,10 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::Open => Message::OpenFile,
             MenuAction::Save => Message::SaveFile,
             MenuAction::SaveAs => Message::SaveFileAs,
+            MenuAction::Cut => Message::Cut,
+            MenuAction::Copy => Message::Copy,
+            MenuAction::Paste => Message::Paste,
+            MenuAction::SelectAll => Message::SelectAll,
         }
     }
 }

@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-09 — Edit menu, menu sizing fix, and View surface
+
+**Context:** User feedback after a live run: the View should match the editor surface; a stray gray box appeared in menus; an Edit menu with common actions was wanted.
+**Decision:** (1) Wrapped the rendered View in a container styled identically to the editor (primary-container surface, `radius_s`, divider border) via a shared `surface_style`. (2) Set `item_height`/`item_width`/`spacing` on `menu::bar` — the dropdown was rendering as an unsized gray box without them (the menu example sets these). (3) Added an Edit menu with Cut/Copy/Paste/Select All, operating on the `text_editor` buffer (selection via `Content::selection`, clipboard via `iced::clipboard::read`/`write`, paste through `Message::Pasted`); items are `ButtonDisabled` outside Source mode.
+**Rationale:** The editor already handles `Ctrl+X/C/V/A` natively when focused, so those keys are intentionally NOT added to the global `key_binds` (avoids double-firing); the Edit menu provides clickable equivalents without accelerator labels. Undo/Redo were omitted because the cosmic-text editor widget exposes no undo action — showing dead/disabled items would be misleading.
+**Consequences:** Builds clean and pedantic-clippy-clean. Undo/redo remain unavailable until the underlying widget supports them. Still not runtime-verified beyond the user's manual check.
+
 ## 2026-06-08 — Keyboard shortcuts added to v1
 
 **Context:** Keyboard accelerators were deferred during Phases 3–8; the user asked to include them in v1.

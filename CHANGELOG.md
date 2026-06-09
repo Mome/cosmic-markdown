@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   conflict. The app's own saves are not treated as external changes.
 - Keyboard shortcuts: New (`Ctrl+N`), Open (`Ctrl+O`), Save (`Ctrl+S`), and Save
   As (`Ctrl+Shift+S`), shown as accelerators in the File menu.
+- An **Edit** menu with Cut, Copy, Paste, and Select All (active in Source mode).
+  The editor also handles the standard `Ctrl+X/C/V/A` shortcuts directly.
 
 ### Changed
 
@@ -41,7 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - The Source editor now renders on the primary-container surface with rounded
   corners and an accent focus border, so it stands out from the window
   background instead of blending in (libcosmic's default `text_editor` style
-  uses the plain window color).
+  uses the plain window color). The rendered View uses the same surface.
+- Menus now set an explicit item width/height, fixing the empty gray box that
+  appeared because the dropdown items were unsized.
 - AppStream metainfo: added a description, developer, homepage/bugtracker URLs,
   Markdown/editor categories and keywords, and a 0.1.0 release entry; corrected
   the invalid `<binaries>` provides wrapper. Removed an unused localization

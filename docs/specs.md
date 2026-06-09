@@ -45,6 +45,12 @@ document.
 
 The **Source** editor uses libcosmic's `text_editor` (cosmic-text) widget as a
 plain-text editor. The Markdown source itself is not syntax-highlighted in v1.
+An **Edit** menu provides Cut, Copy, Paste, and Select All (active in Source
+mode); the editor also handles the standard `Ctrl+X/C/V/A` shortcuts directly
+when focused. Undo/redo are not available (unsupported by the editor widget).
+
+Both the Source editor and the rendered View are presented on a distinct
+"content" surface so they stand out from the window background.
 
 Native COSMIC theming and window chrome are used throughout.
 

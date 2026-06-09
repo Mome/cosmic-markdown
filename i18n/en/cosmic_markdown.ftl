@@ -4,11 +4,16 @@ repository = Repository
 
 # Menus
 file = File
+edit = Edit
 view = View
 new-file = New
 open-file = Open…
 save = Save
 save-as = Save As…
+cut = Cut
+copy = Copy
+paste = Paste
+select-all = Select All
 
 # File dialogs
 markdown-files = Markdown files
