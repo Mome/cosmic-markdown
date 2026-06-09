@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-09 — Defer menu hover-highlight fix
+
+**Context:** Menu items don't highlight on hover in our app (and not in Cedilla either), but they do in COSMIC Text Editor. Investigated the cause.
+**Decision:** Defer the fix and keep the menu code in its natural state (default `menu::bar`, no forced highlighting). Reverted the earlier `PathHighlight::Full` change and an experimental fix that enabled the `wayland` + `surface-message` libcosmic features and wired `on_surface_action`/`window_id` to render menus as popup surfaces.
+**Rationale:** Findings: libcosmic's default features include `winit` and `multi-window` but **not** `wayland` or `surface-message`. The proper COSMIC popup-menu path is `#[cfg(all(multi-window, wayland, target_os="linux", winit, surface-message))]`; without `wayland`+`surface-message` the menu falls back to an in-window overlay whose hover highlight doesn't work on Wayland. cosmic-edit enables `wayland`, so it gets popup menus that highlight; template-based apps (us, Cedilla) don't. The experimental fix (enable those features + wire `on_surface_action`/`window_id_maybe`) compiled cleanly and pulled in the Wayland stack (cctk/smithay/cosmic-protocols), but was not runtime-verified, so the user chose to defer rather than bank a large unverified change.
+**Consequences:** Menu hover remains unhighlighted for now. When revisited: enable `wayland` + `surface-message` features and set `.on_surface_action(Message::Surface).window_id_maybe(self.core.main_window_id())` on the menu bar (with a `Message::Surface(cosmic::surface::Action)` handler dispatching `cosmic::Action::Cosmic(cosmic::app::Action::Surface(_))`). Verify on a real Wayland session before committing.
+
 ## 2026-06-09 — Edit menu, menu sizing fix, and View surface
 
 **Context:** User feedback after a live run: the View should match the editor surface; a stray gray box appeared in menus; an Edit menu with common actions was wanted.
