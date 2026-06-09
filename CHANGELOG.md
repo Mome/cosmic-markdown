@@ -46,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   uses the plain window color). The rendered View uses the same surface.
 - Menus now set an explicit item width/height, fixing the empty gray box that
   appeared because the dropdown items were unsized.
+- Menu items now highlight on hover. The cosmic menu defaults to
+  `PathHighlight::MenuActive`, which only highlights submenu items; set
+  `PathHighlight::Full` so leaf items (New, Open, Cut, …) highlight too.
 - AppStream metainfo: added a description, developer, homepage/bugtracker URLs,
   Markdown/editor categories and keywords, and a 0.1.0 release entry; corrected
   the invalid `<binaries>` provides wrapper. Removed an unused localization

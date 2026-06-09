@@ -297,7 +297,10 @@ impl cosmic::Application for AppModel {
         ])
         .item_height(menu::ItemHeight::Dynamic(40))
         .item_width(menu::ItemWidth::Uniform(240))
-        .spacing(4.0);
+        .spacing(4.0)
+        // Highlight every hovered item; the default (`MenuActive`) only
+        // highlights submenu items, leaving leaf items unhighlighted.
+        .path_highlight(Some(menu::PathHighlight::Full));
 
         vec![menu_bar.into()]
     }
