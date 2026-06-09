@@ -82,6 +82,16 @@ impl LineEnding {
 /// Maximum number of undo snapshots retained.
 const UNDO_LIMIT: usize = 256;
 
+/// Base text size of the Source editor, in pixels (before zoom).
+const EDITOR_TEXT_SIZE: f32 = 14.0;
+/// Base body text size of the rendered View, in pixels (before zoom).
+const VIEW_TEXT_SIZE: f32 = 16.0;
+/// Pixels added/removed per zoom step.
+const ZOOM_STEP: f32 = 2.0;
+/// Zoom delta bounds, in pixels.
+const ZOOM_MIN: f32 = -6.0;
+const ZOOM_MAX: f32 = 32.0;
+
 /// The kind of the current run of edits, used to coalesce undo steps.
 #[derive(Clone, Copy, Default, Eq, PartialEq)]
 enum EditRun {
@@ -169,6 +179,8 @@ pub struct AppModel {
     redo_stack: Vec<String>,
     /// The kind of the in-progress edit run, for coalescing undo steps.
     undo_run: EditRun,
+    /// Zoom delta (pixels) added to the content text sizes.
+    zoom: f32,
     /// The active modal dialog, if any.
     dialog: Option<Dialog>,
     /// An action to run once unsaved changes are resolved (e.g. after saving).
@@ -257,6 +269,12 @@ pub enum Message {
     Undo,
     /// Redo the last undone edit.
     Redo,
+    /// Increase the content text size.
+    ZoomIn,
+    /// Decrease the content text size.
+    ZoomOut,
+    /// Reset the content text size.
+    ZoomReset,
 }
 
 /// Create a COSMIC application from the app model
@@ -314,6 +332,7 @@ impl cosmic::Application for AppModel {
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             undo_run: EditRun::None,
+            zoom: 0.0,
             dialog: None,
             pending: None,
             quitting: false,
@@ -401,6 +420,10 @@ impl cosmic::Application for AppModel {
                             None,
                             MenuAction::ToggleHeaderBar,
                         ),
+                        menu::Item::Divider,
+                        menu::Item::Button(fl!("zoom-in"), None, MenuAction::ZoomIn),
+                        menu::Item::Button(fl!("zoom-out"), None, MenuAction::ZoomOut),
+                        menu::Item::Button(fl!("zoom-reset"), None, MenuAction::ZoomReset),
                         menu::Item::Divider,
                         menu::Item::Button(fl!("about"), None, MenuAction::About),
                     ],
@@ -520,6 +543,7 @@ impl cosmic::Application for AppModel {
                     .on_action(Message::Edit)
                     .height(Length::Fill)
                     .padding(space_s)
+                    .size(EDITOR_TEXT_SIZE + self.zoom)
                     .font(Font::MONOSPACE)
                     .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
                         source_editor_style,
@@ -529,8 +553,11 @@ impl cosmic::Application for AppModel {
             }
             Mode::View => widget::container(
                 widget::scrollable(
-                    markdown::view(self.markdown.items(), markdown_settings())
-                        .map(Message::LaunchUrl),
+                    markdown::view(
+                        self.markdown.items(),
+                        markdown_settings(VIEW_TEXT_SIZE + self.zoom),
+                    )
+                    .map(Message::LaunchUrl),
                 )
                 .width(Length::Fill)
                 .height(Length::Fill),
@@ -921,6 +948,18 @@ impl cosmic::Application for AppModel {
                 }
             }
 
+            Message::ZoomIn => {
+                self.zoom = (self.zoom + ZOOM_STEP).min(ZOOM_MAX);
+            }
+
+            Message::ZoomOut => {
+                self.zoom = (self.zoom - ZOOM_STEP).max(ZOOM_MIN);
+            }
+
+            Message::ZoomReset => {
+                self.zoom = 0.0;
+            }
+
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     // Close the context drawer if the toggled context page is the same.
@@ -1223,13 +1262,13 @@ fn surface_style(theme: &cosmic::Theme) -> cosmic::widget::container::Style {
 }
 
 /// Builds Markdown render settings from the active COSMIC theme (light/dark).
-fn markdown_settings() -> markdown::Settings {
+fn markdown_settings(text_size: f32) -> markdown::Settings {
     let theme = if cosmic::theme::is_dark() {
         cosmic::iced::Theme::Dark
     } else {
         cosmic::iced::Theme::Light
     };
-    markdown::Settings::from(&theme)
+    markdown::Settings::with_text_size(text_size, markdown::Style::from(&theme))
 }
 
 /// The context page to display in the context drawer.
@@ -1256,6 +1295,9 @@ pub enum MenuAction {
     Replace,
     ToggleMode,
     ToggleHeaderBar,
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -1278,6 +1320,9 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::Replace => Message::ReplaceOpen,
             MenuAction::ToggleMode => Message::ToggleMode,
             MenuAction::ToggleHeaderBar => Message::ToggleHeaderBar,
+            MenuAction::ZoomIn => Message::ZoomIn,
+            MenuAction::ZoomOut => Message::ZoomOut,
+            MenuAction::ZoomReset => Message::ZoomReset,
         }
     }
 }
@@ -1395,6 +1440,12 @@ fn key_binds() -> HashMap<menu::KeyBind, MenuAction> {
     bind!([Ctrl, Shift], Key::Character("z".into()), Redo);
     bind!([Ctrl], Key::Character("y".into()), Redo);
     bind!([Ctrl, Shift], Key::Character("h".into()), ToggleHeaderBar);
+    // Zoom: cover Ctrl+=, Ctrl++ (Shift+=), numpad +, Ctrl+-, and Ctrl+0.
+    bind!([Ctrl], Key::Character("=".into()), ZoomIn);
+    bind!([Ctrl, Shift], Key::Character("=".into()), ZoomIn);
+    bind!([Ctrl], Key::Character("+".into()), ZoomIn);
+    bind!([Ctrl], Key::Character("-".into()), ZoomOut);
+    bind!([Ctrl], Key::Character("0".into()), ZoomReset);
 
     binds
 }

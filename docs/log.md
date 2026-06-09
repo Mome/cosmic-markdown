@@ -29,6 +29,13 @@ Format for each entry:
 **Rationale:** `core.window.show_headerbar` is libcosmic's runtime flag for the header bar; flipping it re-renders without it. Since hiding the header also hides the menus and the mode toggle, the keyboard shortcut is essential to restore it.
 **Consequences:** Builds clean and pedantic-clippy-clean.
 
+## 2026-06-09 — Content zoom
+
+**Context:** User wants zooming with `Ctrl++` / `Ctrl+-`.
+**Decision:** Added a `zoom` pixel delta applied to both content text sizes — the editor via `.size(EDITOR_TEXT_SIZE + zoom)` and the View via `markdown_settings(VIEW_TEXT_SIZE + zoom)` (`Settings::with_text_size`). Bound `Ctrl+=`, `Ctrl+Shift+=` (i.e. `Ctrl++`), `Ctrl++` (numpad), `Ctrl+-`, and `Ctrl+0` (reset), plus Zoom In/Out/Reset items in the View menu. Zoom is clamped to `[ZOOM_MIN, ZOOM_MAX]` and steps by `ZOOM_STEP`.
+**Rationale:** A content-only zoom (not the app-wide `scale_factor`) keeps the chrome stable, matching document-zoom expectations. Multiple key bindings cover the `+` key's layout variants. Base sizes differ (editor 14, View 16) but share the same delta.
+**Consequences:** Builds clean and pedantic-clippy-clean. The View-menu accelerator shown for Zoom In is whichever binding the key-map iterates first (cosmetic).
+
 ## 2026-06-09 — Find/replace refinements: highlight, toggle, Esc, focus
 
 **Context:** User feedback on find/replace: focus the editor on entering edit mode; highlight matches; `Ctrl+F`/`Ctrl+H` should toggle the bar closed and switch find↔replace; `Esc` closes.

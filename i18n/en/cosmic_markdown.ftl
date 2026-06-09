@@ -20,6 +20,9 @@ find = Find
 replace = Replace
 toggle-preview = Toggle Preview
 toggle-headerbar = Toggle Header Bar
+zoom-in = Zoom In
+zoom-out = Zoom Out
+zoom-reset = Reset Zoom
 
 # Find / replace bar
 find-placeholder = Find

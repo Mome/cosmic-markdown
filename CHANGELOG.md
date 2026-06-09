@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   it. Select All now shows its `Ctrl+A` shortcut in the Edit menu; Find/Replace
   show theirs too.
 - Entering Source mode now focuses the editor so you can type right away.
+- Zoom the content text with `Ctrl++` / `Ctrl+-` (reset with `Ctrl+0`) or the
+  View menu. Zoom scales the editor and rendered view together, leaving the
+  window chrome unchanged.
 - **Undo** (`Ctrl+Z`) and **Redo** (`Ctrl+Shift+Z` / `Ctrl+Y`), implemented as an
   application-level history of buffer snapshots (the editor widget has no
   built-in undo). Runs of typing/deletion coalesce into single steps.

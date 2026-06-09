@@ -76,6 +76,10 @@ Native COSMIC theming and window chrome are used throughout. The header bar
 (window decorations) can be hidden for a distraction-free view via `Ctrl+Shift+H`
 or the View menu; the same shortcut restores it.
 
+The content text size can be zoomed with `Ctrl++`/`Ctrl+-` (and reset with
+`Ctrl+0`), or via the View menu. Zoom scales the Source editor and the rendered
+View text together; the window chrome is unaffected.
+
 ## Document model & file operations
 
 A single document is open at a time (no multi-tab interface in this phase). The
