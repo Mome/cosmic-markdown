@@ -17,6 +17,9 @@ use std::sync::Arc;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
+// Pop Icons (System76), CC-BY-SA-4.0 — see resources/icons/bundled/COPYING.
+const ICON_PREVIEW: &[u8] = include_bytes!("../resources/icons/bundled/show-symbolic.svg");
+const ICON_EDIT: &[u8] = include_bytes!("../resources/icons/bundled/edit-symbolic.svg");
 
 /// Which representation of the document is currently shown.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -137,8 +140,8 @@ pub enum Message {
     UpdateConfig(Config),
     /// An edit action from the source text editor.
     Edit(text_editor::Action),
-    /// Switch the active view mode.
-    SetMode(Mode),
+    /// Toggle between Source and View modes.
+    ToggleMode,
     /// Start a new, empty document.
     New,
     /// Prompt for a file to open.
@@ -291,7 +294,15 @@ impl cosmic::Application for AppModel {
                 menu::root(fl!("view")).apply(Element::from),
                 menu::items(
                     &self.key_binds,
-                    vec![menu::Item::Button(fl!("about"), None, MenuAction::About)],
+                    vec![
+                        menu::Item::Button(
+                            fl!("toggle-preview"),
+                            None,
+                            MenuAction::ToggleMode,
+                        ),
+                        menu::Item::Divider,
+                        menu::Item::Button(fl!("about"), None, MenuAction::About),
+                    ],
                 ),
             ),
         ])
@@ -304,29 +315,24 @@ impl cosmic::Application for AppModel {
 
     /// Elements to pack at the end of the header bar.
     fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
-        let mode = self.document.mode;
-        let spacing = cosmic::theme::spacing().space_xxs;
-
-        let class = |active| {
-            if active {
-                cosmic::theme::Button::Suggested
-            } else {
-                cosmic::theme::Button::Text
-            }
+        // A single toggle: in Source mode it offers a preview (eye); in View
+        // mode it offers editing (pencil).
+        let (icon_bytes, tooltip_label) = match self.document.mode {
+            Mode::Source => (ICON_PREVIEW, fl!("show-preview")),
+            Mode::View => (ICON_EDIT, fl!("edit-source")),
         };
 
-        let toggle = widget::row::with_capacity(2)
-            .push(
-                widget::button::text(fl!("mode-source"))
-                    .class(class(mode == Mode::Source))
-                    .on_press(Message::SetMode(Mode::Source)),
-            )
-            .push(
-                widget::button::text(fl!("mode-view"))
-                    .class(class(mode == Mode::View))
-                    .on_press(Message::SetMode(Mode::View)),
-            )
-            .spacing(spacing);
+        let button = widget::button::icon(
+            widget::icon::from_svg_bytes(icon_bytes).symbolic(true),
+        )
+        .class(cosmic::theme::Button::Icon)
+        .on_press(Message::ToggleMode);
+
+        let toggle = widget::tooltip(
+            button,
+            widget::text(tooltip_label),
+            widget::tooltip::Position::Bottom,
+        );
 
         vec![toggle.into()]
     }
@@ -476,7 +482,11 @@ impl cosmic::Application for AppModel {
                 }
             }
 
-            Message::SetMode(mode) => {
+            Message::ToggleMode => {
+                let mode = match self.document.mode {
+                    Mode::Source => Mode::View,
+                    Mode::View => Mode::Source,
+                };
                 // Ensure the rendered View reflects the latest source buffer.
                 if mode == Mode::View {
                     self.reparse_markdown();
@@ -824,6 +834,7 @@ pub enum MenuAction {
     Copy,
     Paste,
     SelectAll,
+    ToggleMode,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -840,6 +851,7 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::Copy => Message::Copy,
             MenuAction::Paste => Message::Paste,
             MenuAction::SelectAll => Message::SelectAll,
+            MenuAction::ToggleMode => Message::ToggleMode,
         }
     }
 }
@@ -867,6 +879,7 @@ fn key_binds() -> HashMap<menu::KeyBind, MenuAction> {
     bind!([Ctrl], Key::Character("o".into()), Open);
     bind!([Ctrl], Key::Character("s".into()), Save);
     bind!([Ctrl, Shift], Key::Character("s".into()), SaveAs);
+    bind!([Ctrl], Key::Character("e".into()), ToggleMode);
 
     binds
 }

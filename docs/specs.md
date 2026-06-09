@@ -38,9 +38,11 @@ The window presents one of three modes at a time; the user toggles between them:
   The initial release ships Source and View only.)*
 - **View** — read-only rendered output.
 
-The **View** is always rendered from the live Source buffer, so edits made in
-Source are reflected immediately on switching to View. The default mode is
-**View** when opening an existing file, and **Source** when creating a new
+The user switches between Source and View with a single toggle button in the
+header bar (an eye icon to preview, a pencil icon to edit) or the `Ctrl+E`
+shortcut. The **View** is always rendered from the live Source buffer, so edits
+made in Source are reflected immediately on switching to View. The default mode
+is **View** when opening an existing file, and **Source** when creating a new
 document.
 
 The **Source** editor uses libcosmic's `text_editor` (cosmic-text) widget as a

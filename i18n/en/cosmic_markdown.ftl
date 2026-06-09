@@ -14,6 +14,7 @@ cut = Cut
 copy = Copy
 paste = Paste
 select-all = Select All
+toggle-preview = Toggle Preview
 
 # File dialogs
 markdown-files = Markdown files
@@ -31,6 +32,6 @@ keep-mine = Keep my changes
 reload-from-disk = Load from disk
 
 # Editor
-mode-source = Source
-mode-view = View
+show-preview = Show preview
+edit-source = Edit source
 editor-placeholder = Type your Markdown here…

@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-09 — Icon toggle button for Source/View
+
+**Context:** Replace the two Source/View text buttons with a single icon toggle button plus a hotkey, modelled on Cedilla's eye-icon preview toggle.
+**Decision:** Header now shows one `button::icon` toggle: an eye (`show-symbolic`) in Source mode (→ preview) and a pencil (`edit-symbolic`) in View mode (→ edit), with a tooltip. Added `Message::ToggleMode` (replacing `SetMode(Mode)`), a `Ctrl+E` key binding, and a "Toggle Preview" item in the View menu. Icons are bundled from Cedilla's set — **Pop Icons by System76, CC-BY-SA-4.0** — copied to `resources/icons/bundled/` with a `COPYING` attribution; embedded via `include_bytes!` so no install step is needed.
+**Rationale:** A single icon toggle is more compact and matches COSMIC conventions (cosmic-edit/Cedilla use eye icons). Pop Icons are CC-BY-SA-4.0, compatible with our MPL-2.0 code given attribution. `Ctrl+E` doesn't collide with the editor's built-in bindings.
+**Consequences:** Builds clean and pedantic-clippy-clean. `mode-source`/`mode-view` strings removed; `show-preview`/`edit-source`/`toggle-preview` added.
+
 ## 2026-06-09 — Defer menu hover-highlight fix
 
 **Context:** Menu items don't highlight on hover in our app (and not in Cedilla either), but they do in COSMIC Text Editor. Investigated the cause.
