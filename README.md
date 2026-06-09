@@ -2,7 +2,7 @@
 
 A simple markdown viewer/editor for the COSMIC desktop. The emphasis is on
 *simplicity* — a lightweight, focused viewer/editor rather than a
-feature-heavy application.
+feature-heavy application. Split view and tabs are intentially ommited. 
 
 ![screenshot](./screenshot.png)
 
