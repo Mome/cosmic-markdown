@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The Source editor now renders on the primary-container surface with rounded
+  corners and an accent focus border, so it stands out from the window
+  background instead of blending in (libcosmic's default `text_editor` style
+  uses the plain window color).
 - AppStream metainfo: added a description, developer, homepage/bugtracker URLs,
   Markdown/editor categories and keywords, and a 0.1.0 release entry; corrected
   the invalid `<binaries>` provides wrapper. Removed an unused localization

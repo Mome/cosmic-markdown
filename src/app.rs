@@ -363,6 +363,9 @@ impl cosmic::Application for AppModel {
                 .height(Length::Fill)
                 .padding(space_s)
                 .font(Font::MONOSPACE)
+                .class(cosmic::theme::iced::TextEditor::Custom(Box::new(
+                    source_editor_style,
+                )))
                 .into(),
             Mode::View => widget::scrollable(
                 markdown::view(self.markdown.items(), markdown_settings())
@@ -660,6 +663,38 @@ impl AppModel {
         } else {
             Task::none()
         }
+    }
+}
+
+/// Styles the Source editor as a distinct input surface so it stands out from
+/// the window background (the libcosmic default uses the plain window color).
+fn source_editor_style(
+    theme: &cosmic::Theme,
+    status: text_editor::Status,
+) -> text_editor::Style {
+    use cosmic::iced::{Border, Color};
+
+    let cosmic = theme.cosmic();
+    let value = Color::from(cosmic.on_primary_container_color());
+    let mut placeholder = value;
+    placeholder.a = 0.7;
+    let accent = Color::from(cosmic.accent_color());
+    let focused = matches!(status, text_editor::Status::Focused { .. });
+
+    text_editor::Style {
+        background: Color::from(cosmic.primary_container_color()).into(),
+        border: Border {
+            radius: cosmic.corner_radii.radius_s.into(),
+            width: 1.0,
+            color: if focused {
+                accent
+            } else {
+                Color::from(cosmic.primary_container_divider())
+            },
+        },
+        placeholder,
+        value,
+        selection: accent,
     }
 }
 
