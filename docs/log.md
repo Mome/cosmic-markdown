@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-09 — Toggle window header bar
+
+**Context:** User wants to toggle the window decorations (header bar) for a distraction-free view.
+**Decision:** Added `Message::ToggleHeaderBar` flipping `core.window.show_headerbar`, bound to `Ctrl+Shift+H`, with a "Toggle Header Bar" item in the View menu.
+**Rationale:** `core.window.show_headerbar` is libcosmic's runtime flag for the header bar; flipping it re-renders without it. Since hiding the header also hides the menus and the mode toggle, the keyboard shortcut is essential to restore it.
+**Consequences:** Builds clean and pedantic-clippy-clean.
+
 ## 2026-06-09 — Undo / Redo (application-level history)
 
 **Context:** Add undo/redo with shortcuts. The earlier decision (Phase 6 / Edit-menu) deferred them because the stock cosmic `text_editor` exposes no undo action; the user now wants them.

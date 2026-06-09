@@ -19,6 +19,7 @@ select-all = Select All
 find = Find
 replace = Replace
 toggle-preview = Toggle Preview
+toggle-headerbar = Toggle Header Bar
 
 # Find / replace bar
 find-placeholder = Find

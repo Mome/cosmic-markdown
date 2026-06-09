@@ -187,6 +187,8 @@ pub enum Message {
     Edit(text_editor::Action),
     /// Toggle between Source and View modes.
     ToggleMode,
+    /// Show or hide the window header bar (decorations).
+    ToggleHeaderBar,
     /// Start a new, empty document.
     New,
     /// Prompt for a file to open.
@@ -393,6 +395,11 @@ impl cosmic::Application for AppModel {
                             fl!("toggle-preview"),
                             None,
                             MenuAction::ToggleMode,
+                        ),
+                        menu::Item::Button(
+                            fl!("toggle-headerbar"),
+                            None,
+                            MenuAction::ToggleHeaderBar,
                         ),
                         menu::Item::Divider,
                         menu::Item::Button(fl!("about"), None, MenuAction::About),
@@ -612,6 +619,10 @@ impl cosmic::Application for AppModel {
                     self.reparse_markdown();
                 }
                 self.document.mode = mode;
+            }
+
+            Message::ToggleHeaderBar => {
+                self.core.window.show_headerbar = !self.core.window.show_headerbar;
             }
 
             Message::New => {
@@ -1187,6 +1198,7 @@ pub enum MenuAction {
     Find,
     Replace,
     ToggleMode,
+    ToggleHeaderBar,
 }
 
 impl menu::action::MenuAction for MenuAction {
@@ -1208,6 +1220,7 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::Find => Message::FindOpen,
             MenuAction::Replace => Message::ReplaceOpen,
             MenuAction::ToggleMode => Message::ToggleMode,
+            MenuAction::ToggleHeaderBar => Message::ToggleHeaderBar,
         }
     }
 }
@@ -1247,6 +1260,7 @@ fn key_binds() -> HashMap<menu::KeyBind, MenuAction> {
     bind!([Ctrl], Key::Character("z".into()), Undo);
     bind!([Ctrl, Shift], Key::Character("z".into()), Redo);
     bind!([Ctrl], Key::Character("y".into()), Redo);
+    bind!([Ctrl, Shift], Key::Character("h".into()), ToggleHeaderBar);
 
     binds
 }

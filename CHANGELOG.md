@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Undo** (`Ctrl+Z`) and **Redo** (`Ctrl+Shift+Z` / `Ctrl+Y`), implemented as an
   application-level history of buffer snapshots (the editor widget has no
   built-in undo). Runs of typing/deletion coalesce into single steps.
+- Toggle the window header bar (decorations) with `Ctrl+Shift+H` or the View
+  menu, for a distraction-free view.
 - The Source/View toggle is now a single header icon button (eye to preview,
   pencil to edit) with a tooltip, a `Ctrl+E` shortcut, and a View-menu entry,
   replacing the two text buttons. Uses bundled Pop Icons (CC-BY-SA-4.0).

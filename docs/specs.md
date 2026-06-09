@@ -67,7 +67,9 @@ substitutes the current match; Replace All substitutes every occurrence.
 Both the Source editor and the rendered View are presented on a distinct
 "content" surface so they stand out from the window background.
 
-Native COSMIC theming and window chrome are used throughout.
+Native COSMIC theming and window chrome are used throughout. The header bar
+(window decorations) can be hidden for a distraction-free view via `Ctrl+Shift+H`
+or the View menu; the same shortcut restores it.
 
 ## Document model & file operations
 
