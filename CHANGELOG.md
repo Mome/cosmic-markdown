@@ -52,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Content margins: removed the scrollbar/content gap in the rendered View that
+  made the right margin look larger than the others, and reduced the top margin
+  when the header bar is shown (it was stacking with the header's own
+  separation).
 - The Source editor now renders on the primary-container surface with rounded
   corners and an accent focus border, so it stands out from the window
   background instead of blending in (libcosmic's default `text_editor` style

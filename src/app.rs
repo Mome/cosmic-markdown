@@ -515,7 +515,6 @@ impl cosmic::Application for AppModel {
                     markdown::view(self.markdown.items(), markdown_settings())
                         .map(Message::LaunchUrl),
                 )
-                .spacing(space_s)
                 .width(Length::Fill)
                 .height(Length::Fill),
             )
@@ -538,10 +537,25 @@ impl cosmic::Application for AppModel {
 
         column = column.push(content);
 
+        // The header bar already separates itself from the content, so use a
+        // smaller top margin when it is shown; keep a full margin otherwise.
+        let space_xxs = cosmic::theme::spacing().space_xxs;
+        let top = if self.core.window.show_headerbar {
+            space_xxs
+        } else {
+            space_s
+        };
+        let padding = [
+            f32::from(top),
+            f32::from(space_s),
+            f32::from(space_s),
+            f32::from(space_s),
+        ];
+
         widget::container(column)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(space_s)
+            .padding(padding)
             .into()
     }
 
