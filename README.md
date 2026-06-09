@@ -4,6 +4,8 @@ A simple markdown viewer/editor for the COSMIC desktop. The emphasis is on
 *simplicity* — a lightweight, focused viewer/editor rather than a
 feature-heavy application.
 
+![screenshot](./screenshot.png)
+
 ## Installation
 
 A [justfile](./justfile) is included by default for the [casey/just][just] command runner.
