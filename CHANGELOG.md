@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   As (`Ctrl+Shift+S`), shown as accelerators in the File menu.
 - An **Edit** menu with Cut, Copy, Paste, and Select All (active in Source mode).
   The editor also handles the standard `Ctrl+X/C/V/A` shortcuts directly.
+- **Find** (`Ctrl+F`) and **Replace** (`Ctrl+H`): a find bar with match count and
+  Previous/Next navigation (selecting each match), plus Replace and Replace All.
+  Select All now shows its `Ctrl+A` shortcut in the Edit menu; Find/Replace show
+  theirs too.
 - The Source/View toggle is now a single header icon button (eye to preview,
   pencil to edit) with a tooltip, a `Ctrl+E` shortcut, and a View-menu entry,
   replacing the two text buttons. Uses bundled Pop Icons (CC-BY-SA-4.0).

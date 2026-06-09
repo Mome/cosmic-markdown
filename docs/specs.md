@@ -47,9 +47,15 @@ document.
 
 The **Source** editor uses libcosmic's `text_editor` (cosmic-text) widget as a
 plain-text editor. The Markdown source itself is not syntax-highlighted in v1.
-An **Edit** menu provides Cut, Copy, Paste, and Select All (active in Source
-mode); the editor also handles the standard `Ctrl+X/C/V/A` shortcuts directly
-when focused. Undo/redo are not available (unsupported by the editor widget).
+An **Edit** menu provides Cut, Copy, Paste, Select All (`Ctrl+A`), Find
+(`Ctrl+F`), and Replace (`Ctrl+H`) — all active in Source mode; the editor also
+handles the standard `Ctrl+X/C/V/A` shortcuts directly when focused. Undo/redo
+are not available (unsupported by the editor widget).
+
+**Find / Replace.** A find bar (toggled by `Ctrl+F`, or `Ctrl+H` with a replace
+row) searches the buffer for plain-text matches, shows the match count, and
+navigates between matches (Previous/Next), selecting each in the editor. Replace
+substitutes the current match; Replace All substitutes every occurrence.
 
 Both the Source editor and the rendered View are presented on a distinct
 "content" surface so they stand out from the window background.

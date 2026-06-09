@@ -14,7 +14,19 @@ cut = Cut
 copy = Copy
 paste = Paste
 select-all = Select All
+find = Find
+replace = Replace
 toggle-preview = Toggle Preview
+
+# Find / replace bar
+find-placeholder = Find
+replace-placeholder = Replace with
+match-prev = Previous
+match-next = Next
+close = Close
+replace-one = Replace
+replace-all = Replace all
+no-matches = No matches
 
 # File dialogs
 markdown-files = Markdown files

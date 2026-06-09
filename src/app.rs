@@ -6,7 +6,7 @@ use cosmic::app::context_drawer;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::dialog::file_chooser::{self, FileFilter};
 use cosmic::iced::futures::{SinkExt, Stream};
-use cosmic::iced::{Font, Length, Subscription, keyboard};
+use cosmic::iced::{Alignment, Font, Length, Subscription, keyboard};
 use cosmic::prelude::*;
 use cosmic::widget::menu::action::MenuAction as _;
 use cosmic::widget::{self, about::About, markdown, menu, text_editor};
@@ -79,6 +79,31 @@ impl LineEnding {
     }
 }
 
+/// A single search match: byte offsets within a line.
+#[derive(Clone, Copy)]
+struct Match {
+    line: usize,
+    start: usize,
+    end: usize,
+}
+
+/// Find/replace state.
+#[derive(Default)]
+pub struct Search {
+    /// Whether the find bar is shown.
+    active: bool,
+    /// Whether the replace row is shown.
+    show_replace: bool,
+    /// The current search query.
+    query: String,
+    /// The replacement text.
+    replacement: String,
+    /// Matches of `query` in the current buffer.
+    matches: Vec<Match>,
+    /// Index of the active match within `matches`.
+    current: usize,
+}
+
 /// The currently open document.
 pub struct Document {
     /// On-disk location, or `None` for a new unsaved document.
@@ -124,6 +149,8 @@ pub struct AppModel {
     markdown: markdown::Content,
     /// A user-facing error message, shown as a dismissible banner.
     error: Option<String>,
+    /// Find/replace state.
+    search: Search,
     /// The active modal dialog, if any.
     dialog: Option<Dialog>,
     /// An action to run once unsaved changes are resolved (e.g. after saving).
@@ -188,6 +215,24 @@ pub enum Message {
     Pasted(Option<String>),
     /// Select all text in the editor.
     SelectAll,
+    /// Open the find bar.
+    FindOpen,
+    /// Open the find bar with the replace row.
+    ReplaceOpen,
+    /// Close the find/replace bar.
+    FindClose,
+    /// The find query changed.
+    FindQueryChanged(String),
+    /// The replacement text changed.
+    ReplacementChanged(String),
+    /// Move to the next match.
+    FindNext,
+    /// Move to the previous match.
+    FindPrev,
+    /// Replace the current match.
+    ReplaceCurrent,
+    /// Replace all matches.
+    ReplaceAll,
 }
 
 /// Create a COSMIC application from the app model
@@ -241,6 +286,7 @@ impl cosmic::Application for AppModel {
             document: Document::default(),
             markdown: markdown::Content::new(),
             error: None,
+            search: Search::default(),
             dialog: None,
             pending: None,
             quitting: false,
@@ -287,6 +333,9 @@ impl cosmic::Application for AppModel {
                         edit_item(fl!("paste"), MenuAction::Paste),
                         menu::Item::Divider,
                         edit_item(fl!("select-all"), MenuAction::SelectAll),
+                        menu::Item::Divider,
+                        edit_item(fl!("find"), MenuAction::Find),
+                        edit_item(fl!("replace"), MenuAction::Replace),
                     ],
                 ),
             ),
@@ -425,10 +474,14 @@ impl cosmic::Application for AppModel {
             .into(),
         };
 
-        let mut column = widget::column::with_capacity(2).spacing(space_s);
+        let mut column = widget::column::with_capacity(4).spacing(space_s);
 
         if let Some(error) = self.error.as_deref() {
             column = column.push(widget::warning(error).on_close(Message::DismissError));
+        }
+
+        if self.search.active && self.document.mode == Mode::Source {
+            column = column.push(self.find_bar());
         }
 
         column = column.push(content);
@@ -651,6 +704,77 @@ impl cosmic::Application for AppModel {
                 self.document.content.perform(text_editor::Action::SelectAll);
             }
 
+            Message::FindOpen | Message::ReplaceOpen => {
+                self.document.mode = Mode::Source;
+                self.search.active = true;
+                self.search.show_replace = matches!(message, Message::ReplaceOpen);
+                self.recompute_matches();
+                self.select_current_match();
+                return widget::text_input::focus(find_input_id()).map(cosmic::Action::App);
+            }
+
+            Message::FindClose => {
+                self.search.active = false;
+            }
+
+            Message::FindQueryChanged(query) => {
+                self.search.query = query;
+                self.search.current = 0;
+                self.recompute_matches();
+                self.select_current_match();
+            }
+
+            Message::ReplacementChanged(replacement) => {
+                self.search.replacement = replacement;
+            }
+
+            Message::FindNext => {
+                if !self.search.matches.is_empty() {
+                    self.search.current =
+                        (self.search.current + 1) % self.search.matches.len();
+                    self.select_current_match();
+                }
+            }
+
+            Message::FindPrev => {
+                if !self.search.matches.is_empty() {
+                    let len = self.search.matches.len();
+                    self.search.current = (self.search.current + len - 1) % len;
+                    self.select_current_match();
+                }
+            }
+
+            Message::ReplaceCurrent => {
+                if !self.search.matches.is_empty() {
+                    self.select_current_match();
+                    let replacement = self.search.replacement.clone();
+                    self.document
+                        .content
+                        .perform(text_editor::Action::Edit(text_editor::Edit::Paste(
+                            Arc::new(replacement),
+                        )));
+                    self.document.dirty = true;
+                    self.reparse_markdown();
+                    self.recompute_matches();
+                    self.select_current_match();
+                }
+            }
+
+            Message::ReplaceAll => {
+                if !self.search.query.is_empty() {
+                    let replaced = self
+                        .document
+                        .content
+                        .text()
+                        .replace(&self.search.query, &self.search.replacement);
+                    self.document.content = text_editor::Content::with_text(&replaced);
+                    self.document.dirty = true;
+                    self.reparse_markdown();
+                    self.search.current = 0;
+                    self.recompute_matches();
+                }
+            }
+
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     // Close the context drawer if the toggled context page is the same.
@@ -681,6 +805,111 @@ impl AppModel {
     /// Rebuilds the rendered Markdown from the current source buffer.
     fn reparse_markdown(&mut self) {
         self.markdown = markdown::Content::parse(&self.document.content.text());
+    }
+
+    /// Builds the find (and optional replace) bar shown above the editor.
+    fn find_bar(&self) -> Element<'_, Message> {
+        let spacing = cosmic::theme::spacing().space_xxs;
+        let has_matches = !self.search.matches.is_empty();
+
+        let count = if self.search.query.is_empty() {
+            String::new()
+        } else if has_matches {
+            format!("{}/{}", self.search.current + 1, self.search.matches.len())
+        } else {
+            fl!("no-matches")
+        };
+
+        let find_row = widget::row::with_capacity(6)
+            .spacing(spacing)
+            .align_y(Alignment::Center)
+            .push(
+                widget::text_input(fl!("find-placeholder"), &self.search.query)
+                    .id(find_input_id())
+                    .on_input(Message::FindQueryChanged)
+                    .on_submit(|_| Message::FindNext),
+            )
+            .push(widget::text(count))
+            .push(
+                widget::button::text(fl!("match-prev"))
+                    .on_press_maybe(has_matches.then_some(Message::FindPrev)),
+            )
+            .push(
+                widget::button::text(fl!("match-next"))
+                    .on_press_maybe(has_matches.then_some(Message::FindNext)),
+            )
+            .push(widget::space::horizontal())
+            .push(widget::button::text(fl!("close")).on_press(Message::FindClose));
+
+        let mut column = widget::column::with_capacity(2)
+            .spacing(spacing)
+            .push(find_row);
+
+        if self.search.show_replace {
+            let can_replace = has_matches && !self.search.query.is_empty();
+            let replace_row = widget::row::with_capacity(3)
+                .spacing(spacing)
+                .align_y(Alignment::Center)
+                .push(
+                    widget::text_input(fl!("replace-placeholder"), &self.search.replacement)
+                        .on_input(Message::ReplacementChanged),
+                )
+                .push(
+                    widget::button::text(fl!("replace-one"))
+                        .on_press_maybe(can_replace.then_some(Message::ReplaceCurrent)),
+                )
+                .push(
+                    widget::button::text(fl!("replace-all"))
+                        .on_press_maybe(can_replace.then_some(Message::ReplaceAll)),
+                );
+            column = column.push(replace_row);
+        }
+
+        widget::container(column)
+            .class(cosmic::theme::Container::Custom(Box::new(surface_style)))
+            .padding(spacing)
+            .into()
+    }
+
+    /// Recomputes search matches for the current query over the buffer.
+    fn recompute_matches(&mut self) {
+        self.search.matches.clear();
+
+        let query = self.search.query.clone();
+        if query.is_empty() {
+            return;
+        }
+
+        let text = self.document.content.text();
+        for (line, content) in text.lines().enumerate() {
+            let mut from = 0;
+            while let Some(offset) = content[from..].find(&query) {
+                let start = from + offset;
+                let end = start + query.len();
+                self.search.matches.push(Match { line, start, end });
+                from = end.max(start + 1);
+            }
+        }
+
+        if self.search.current >= self.search.matches.len() {
+            self.search.current = 0;
+        }
+    }
+
+    /// Selects the active match in the editor, if any.
+    fn select_current_match(&mut self) {
+        if let Some(m) = self.search.matches.get(self.search.current) {
+            self.document.content.move_to(text_editor::Cursor {
+                position: text_editor::Position {
+                    line: m.line,
+                    column: m.end,
+                },
+                selection: Some(text_editor::Position {
+                    line: m.line,
+                    column: m.start,
+                }),
+            });
+        }
     }
 
     /// Replaces the document's buffer with `contents`, marking it clean and
@@ -834,6 +1063,8 @@ pub enum MenuAction {
     Copy,
     Paste,
     SelectAll,
+    Find,
+    Replace,
     ToggleMode,
 }
 
@@ -851,9 +1082,16 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::Copy => Message::Copy,
             MenuAction::Paste => Message::Paste,
             MenuAction::SelectAll => Message::SelectAll,
+            MenuAction::Find => Message::FindOpen,
+            MenuAction::Replace => Message::ReplaceOpen,
             MenuAction::ToggleMode => Message::ToggleMode,
         }
     }
+}
+
+/// The widget id of the find query input (for focusing).
+fn find_input_id() -> widget::Id {
+    widget::Id::new("cosmic-markdown-find-input")
 }
 
 /// The application's keyboard shortcuts, mapped to menu actions.
@@ -880,6 +1118,9 @@ fn key_binds() -> HashMap<menu::KeyBind, MenuAction> {
     bind!([Ctrl], Key::Character("s".into()), Save);
     bind!([Ctrl, Shift], Key::Character("s".into()), SaveAs);
     bind!([Ctrl], Key::Character("e".into()), ToggleMode);
+    bind!([Ctrl], Key::Character("a".into()), SelectAll);
+    bind!([Ctrl], Key::Character("f".into()), Find);
+    bind!([Ctrl], Key::Character("h".into()), Replace);
 
     binds
 }

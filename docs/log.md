@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-09 — Find / Replace and Select-All shortcut
+
+**Context:** Add Find, Replace, and a visible Select-All shortcut to the Edit menu.
+**Decision:** Implemented a `Search` state (query, replacement, matches, current index) and a find bar (toggled by `Ctrl+F`; `Ctrl+H` shows the replace row). Matches are computed as byte offsets per line over `content.text()`; navigation selects a match by constructing a `text_editor::Cursor { position, selection }` and calling `Content::move_to` (the stock `Cursor`/`Position` fields are public). Replace selects the match and pastes the replacement (`Edit::Paste` over a selection); Replace All does a whole-buffer `str::replace` and reloads. Added `Ctrl+A`/`Ctrl+F`/`Ctrl+H` to `key_binds` and the matching Edit-menu items so accelerators display.
+**Rationale:** The stock cosmic `text_editor` lacks search APIs (Cedilla forked the whole widget to add them); building on the public `Cursor`/`move_to` and selection-paste keeps us on the stock widget. Column offsets are byte-based to match cosmic-text's cursor model. `Ctrl+A` double-fires (editor's native + our handler) but is idempotent; `Ctrl+F`/`Ctrl+H` aren't editor-bound, so no conflict.
+**Consequences:** Builds clean and pedantic-clippy-clean. Limitations: matches are plain-text and single-line (no regex, no cross-line); the find bar shows only in Source mode; Esc-to-close isn't wired (a Close button is provided); pressing `Ctrl+A` while a find/replace field is focused selects in the editor, not the field.
+
 ## 2026-06-09 — Icon toggle button for Source/View
 
 **Context:** Replace the two Source/View text buttons with a single icon toggle button plus a hotkey, modelled on Cedilla's eye-icon preview toggle.
