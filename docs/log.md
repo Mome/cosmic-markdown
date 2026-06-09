@@ -22,6 +22,13 @@ Format for each entry:
 **Rationale:** Reusing the built-in widget keeps the implementation simple (the project's guiding principle) and avoids adopting or building a custom renderer (e.g. Frostmark, as Cedilla did). The dropped features are not essential to the core use case.
 **Consequences:** Code highlighting colors will follow syntect themes, not the COSMIC theme. Image rendering needs a custom `Viewer` impl. If definition lists/footnotes/HTML become required later, the rendering stack would need to be reconsidered (Frostmark or custom). See the earlier note to revisit Frostmark.
 
+## 2026-06-09 — Undo / Redo (application-level history)
+
+**Context:** Add undo/redo with shortcuts. The earlier decision (Phase 6 / Edit-menu) deferred them because the stock cosmic `text_editor` exposes no undo action; the user now wants them.
+**Decision:** Implemented an application-level history: `undo_stack`/`redo_stack` of full buffer-text snapshots (capped at `UNDO_LIMIT = 256`). The main edit path (`Message::Edit`) snapshots at run boundaries, coalescing consecutive non-whitespace insertions and consecutive backspaces into single steps (tracked via an `EditRun` enum); pastes, cuts, replacements, whitespace, and Enter each begin a new step. Programmatic edits (menu Cut/Paste, Replace/Replace All) call `begin_edit()` to snapshot first. Undo/redo swap snapshots and reset the buffer via `set_buffer`. History is cleared on New/Open/load (`reset_history`). Shortcuts: `Ctrl+Z` undo, `Ctrl+Shift+Z`/`Ctrl+Y` redo; Edit-menu items are disabled when the relevant stack is empty.
+**Rationale:** Cedilla forked the whole editor widget to get undo; an app-level snapshot history avoids that and is adequate for a simple editor. Coalescing keeps undo steps word/run-sized rather than per-keystroke. This supersedes the earlier "undo/redo omitted" note.
+**Consequences:** Builds clean and pedantic-clippy-clean. Trade-offs: snapshots are full-text copies (fine for typical Markdown sizes; bounded by `UNDO_LIMIT`); undo/redo reset the cursor to the buffer start (no cursor restoration) and mark the document dirty even if it returns to the saved state.
+
 ## 2026-06-09 — Find / Replace and Select-All shortcut
 
 **Context:** Add Find, Replace, and a visible Select-All shortcut to the Edit menu.

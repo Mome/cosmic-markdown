@@ -79,6 +79,18 @@ impl LineEnding {
     }
 }
 
+/// Maximum number of undo snapshots retained.
+const UNDO_LIMIT: usize = 256;
+
+/// The kind of the current run of edits, used to coalesce undo steps.
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
+enum EditRun {
+    #[default]
+    None,
+    Insert,
+    Backspace,
+}
+
 /// A single search match: byte offsets within a line.
 #[derive(Clone, Copy)]
 struct Match {
@@ -151,6 +163,12 @@ pub struct AppModel {
     error: Option<String>,
     /// Find/replace state.
     search: Search,
+    /// Buffer snapshots for undo (oldest first).
+    undo_stack: Vec<String>,
+    /// Buffer snapshots for redo.
+    redo_stack: Vec<String>,
+    /// The kind of the in-progress edit run, for coalescing undo steps.
+    undo_run: EditRun,
     /// The active modal dialog, if any.
     dialog: Option<Dialog>,
     /// An action to run once unsaved changes are resolved (e.g. after saving).
@@ -233,6 +251,10 @@ pub enum Message {
     ReplaceCurrent,
     /// Replace all matches.
     ReplaceAll,
+    /// Undo the last edit.
+    Undo,
+    /// Redo the last undone edit.
+    Redo,
 }
 
 /// Create a COSMIC application from the app model
@@ -287,6 +309,9 @@ impl cosmic::Application for AppModel {
             markdown: markdown::Content::new(),
             error: None,
             search: Search::default(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            undo_run: EditRun::None,
             dialog: None,
             pending: None,
             quitting: false,
@@ -301,8 +326,17 @@ impl cosmic::Application for AppModel {
     /// Elements to pack at the start of the header bar.
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
         // Edit actions operate on the Source editor, so disable them in View mode.
+        let source_mode = self.document.mode == Mode::Source;
         let edit_item = |label: String, action: MenuAction| {
-            if self.document.mode == Mode::Source {
+            if source_mode {
+                menu::Item::Button(label, None, action)
+            } else {
+                menu::Item::ButtonDisabled(label, None, action)
+            }
+        };
+        // Undo/redo are additionally gated on history availability.
+        let history_item = |label: String, action: MenuAction, enabled: bool| {
+            if source_mode && enabled {
                 menu::Item::Button(label, None, action)
             } else {
                 menu::Item::ButtonDisabled(label, None, action)
@@ -328,6 +362,17 @@ impl cosmic::Application for AppModel {
                 menu::items(
                     &self.key_binds,
                     vec![
+                        history_item(
+                            fl!("undo"),
+                            MenuAction::Undo,
+                            !self.undo_stack.is_empty(),
+                        ),
+                        history_item(
+                            fl!("redo"),
+                            MenuAction::Redo,
+                            !self.redo_stack.is_empty(),
+                        ),
+                        menu::Item::Divider,
                         edit_item(fl!("cut"), MenuAction::Cut),
                         edit_item(fl!("copy"), MenuAction::Copy),
                         edit_item(fl!("paste"), MenuAction::Paste),
@@ -527,6 +572,28 @@ impl cosmic::Application for AppModel {
         match message {
             Message::Edit(action) => {
                 let is_edit = action.is_edit();
+
+                if is_edit {
+                    let run = match &action {
+                        text_editor::Action::Edit(text_editor::Edit::Insert(c))
+                            if !c.is_whitespace() =>
+                        {
+                            EditRun::Insert
+                        }
+                        text_editor::Action::Edit(text_editor::Edit::Backspace) => {
+                            EditRun::Backspace
+                        }
+                        _ => EditRun::None,
+                    };
+                    // Start a new undo step at run boundaries; coalesce within a run.
+                    if run == EditRun::None || run != self.undo_run {
+                        self.push_undo_snapshot();
+                    }
+                    self.undo_run = run;
+                } else {
+                    self.undo_run = EditRun::None;
+                }
+
                 self.document.content.perform(action);
 
                 if is_edit {
@@ -674,6 +741,7 @@ impl cosmic::Application for AppModel {
 
             Message::Cut => {
                 if let Some(selection) = self.document.content.selection() {
+                    self.begin_edit();
                     self.document
                         .content
                         .perform(text_editor::Action::Edit(text_editor::Edit::Delete));
@@ -689,6 +757,7 @@ impl cosmic::Application for AppModel {
             }
 
             Message::Pasted(Some(text)) => {
+                self.begin_edit();
                 self.document
                     .content
                     .perform(text_editor::Action::Edit(text_editor::Edit::Paste(
@@ -747,6 +816,7 @@ impl cosmic::Application for AppModel {
             Message::ReplaceCurrent => {
                 if !self.search.matches.is_empty() {
                     self.select_current_match();
+                    self.begin_edit();
                     let replacement = self.search.replacement.clone();
                     self.document
                         .content
@@ -761,7 +831,8 @@ impl cosmic::Application for AppModel {
             }
 
             Message::ReplaceAll => {
-                if !self.search.query.is_empty() {
+                if !self.search.matches.is_empty() {
+                    self.begin_edit();
                     let replaced = self
                         .document
                         .content
@@ -772,6 +843,22 @@ impl cosmic::Application for AppModel {
                     self.reparse_markdown();
                     self.search.current = 0;
                     self.recompute_matches();
+                }
+            }
+
+            Message::Undo => {
+                if let Some(previous) = self.undo_stack.pop() {
+                    self.redo_stack.push(self.document.content.text());
+                    self.set_buffer(&previous);
+                    self.undo_run = EditRun::None;
+                }
+            }
+
+            Message::Redo => {
+                if let Some(next) = self.redo_stack.pop() {
+                    self.undo_stack.push(self.document.content.text());
+                    self.set_buffer(&next);
+                    self.undo_run = EditRun::None;
                 }
             }
 
@@ -805,6 +892,36 @@ impl AppModel {
     /// Rebuilds the rendered Markdown from the current source buffer.
     fn reparse_markdown(&mut self) {
         self.markdown = markdown::Content::parse(&self.document.content.text());
+    }
+
+    /// Pushes the current buffer onto the undo stack and clears the redo stack.
+    fn push_undo_snapshot(&mut self) {
+        self.undo_stack.push(self.document.content.text());
+        if self.undo_stack.len() > UNDO_LIMIT {
+            self.undo_stack.remove(0);
+        }
+        self.redo_stack.clear();
+    }
+
+    /// Records an undo snapshot for a programmatic (non-typing) edit.
+    fn begin_edit(&mut self) {
+        self.push_undo_snapshot();
+        self.undo_run = EditRun::None;
+    }
+
+    /// Replaces the buffer with `text` (marking it dirty) without recording undo.
+    fn set_buffer(&mut self, text: &str) {
+        self.document.content = text_editor::Content::with_text(text);
+        self.document.dirty = true;
+        self.reparse_markdown();
+        self.recompute_matches();
+    }
+
+    /// Clears the undo/redo history (e.g. when a new document is loaded).
+    fn reset_history(&mut self) {
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+        self.undo_run = EditRun::None;
     }
 
     /// Builds the find (and optional replace) bar shown above the editor.
@@ -919,6 +1036,7 @@ impl AppModel {
         self.document.content = text_editor::Content::with_text(contents);
         self.document.dirty = false;
         self.reparse_markdown();
+        self.reset_history();
     }
 
     /// Performs `action` immediately, or prompts to save first when the document
@@ -939,6 +1057,7 @@ impl AppModel {
                 self.document = Document::default();
                 self.markdown = markdown::Content::new();
                 self.error = None;
+                self.reset_history();
                 self.update_title()
             }
             PendingAction::Open => cosmic::task::future(open_file_dialog()),
@@ -1059,6 +1178,8 @@ pub enum MenuAction {
     Open,
     Save,
     SaveAs,
+    Undo,
+    Redo,
     Cut,
     Copy,
     Paste,
@@ -1078,6 +1199,8 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::Open => Message::OpenFile,
             MenuAction::Save => Message::SaveFile,
             MenuAction::SaveAs => Message::SaveFileAs,
+            MenuAction::Undo => Message::Undo,
+            MenuAction::Redo => Message::Redo,
             MenuAction::Cut => Message::Cut,
             MenuAction::Copy => Message::Copy,
             MenuAction::Paste => Message::Paste,
@@ -1121,6 +1244,9 @@ fn key_binds() -> HashMap<menu::KeyBind, MenuAction> {
     bind!([Ctrl], Key::Character("a".into()), SelectAll);
     bind!([Ctrl], Key::Character("f".into()), Find);
     bind!([Ctrl], Key::Character("h".into()), Replace);
+    bind!([Ctrl], Key::Character("z".into()), Undo);
+    bind!([Ctrl, Shift], Key::Character("z".into()), Redo);
+    bind!([Ctrl], Key::Character("y".into()), Redo);
 
     binds
 }

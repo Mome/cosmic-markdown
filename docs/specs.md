@@ -47,10 +47,17 @@ document.
 
 The **Source** editor uses libcosmic's `text_editor` (cosmic-text) widget as a
 plain-text editor. The Markdown source itself is not syntax-highlighted in v1.
-An **Edit** menu provides Cut, Copy, Paste, Select All (`Ctrl+A`), Find
-(`Ctrl+F`), and Replace (`Ctrl+H`) — all active in Source mode; the editor also
-handles the standard `Ctrl+X/C/V/A` shortcuts directly when focused. Undo/redo
-are not available (unsupported by the editor widget).
+An **Edit** menu provides Undo (`Ctrl+Z`), Redo (`Ctrl+Shift+Z` / `Ctrl+Y`),
+Cut, Copy, Paste, Select All (`Ctrl+A`), Find (`Ctrl+F`), and Replace
+(`Ctrl+H`) — all active in Source mode; the editor also handles the standard
+`Ctrl+X/C/V/A` shortcuts directly when focused.
+
+**Undo / Redo.** The editor widget has no built-in undo, so the application
+maintains its own history of buffer snapshots. Consecutive character insertions
+(and consecutive deletions) are coalesced into a single undo step; pastes,
+cuts, replacements, and whitespace/line boundaries start a new step. History is
+cleared when a document is opened or created and bounded to a fixed number of
+steps.
 
 **Find / Replace.** A find bar (toggled by `Ctrl+F`, or `Ctrl+H` with a replace
 row) searches the buffer for plain-text matches, shows the match count, and

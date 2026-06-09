@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Previous/Next navigation (selecting each match), plus Replace and Replace All.
   Select All now shows its `Ctrl+A` shortcut in the Edit menu; Find/Replace show
   theirs too.
+- **Undo** (`Ctrl+Z`) and **Redo** (`Ctrl+Shift+Z` / `Ctrl+Y`), implemented as an
+  application-level history of buffer snapshots (the editor widget has no
+  built-in undo). Runs of typing/deletion coalesce into single steps.
 - The Source/View toggle is now a single header icon button (eye to preview,
   pencil to edit) with a tooltip, a `Ctrl+E` shortcut, and a View-menu entry,
   replacing the two text buttons. Uses bundled Pop Icons (CC-BY-SA-4.0).
