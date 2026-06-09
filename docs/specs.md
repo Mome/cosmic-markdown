@@ -107,9 +107,10 @@ user to save, discard, or cancel before proceeding.
 preserved on save; new documents use `\n`.
 
 **Open with / CLI.** Launching the application with a file path argument (e.g.
-via the file manager's "Open with") opens that file. This respects the
-single-instance behavior: an already-running instance is focused and opens the
-file rather than starting a second process.
+via the file manager's "Open with") opens that file in View mode. Each launch
+opens its own window; single-instance forwarding (focusing a running instance
+and opening the file there) is not currently implemented — the app runs via
+`cosmic::app::run`, not `run_single_instance`.
 
 **External change detection.** While a file is open, the application watches it
 on disk (live file watching via the `notify` crate / inotify on Linux) and

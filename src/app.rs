@@ -282,8 +282,9 @@ impl cosmic::Application for AppModel {
     /// The async executor that will be used to run your application's commands.
     type Executor = cosmic::executor::Default;
 
-    /// Data that your application receives to its init method.
-    type Flags = ();
+    /// Data that your application receives to its init method: an optional
+    /// file path to open on startup (e.g. from "Open with").
+    type Flags = Option<PathBuf>;
 
     /// Messages which the application and its widgets will emit.
     type Message = Message;
@@ -302,7 +303,7 @@ impl cosmic::Application for AppModel {
     /// Initializes the application with any given flags and startup commands.
     fn init(
         core: cosmic::Core,
-        _flags: Self::Flags,
+        flags: Self::Flags,
     ) -> (Self, Task<cosmic::Action<Self::Message>>) {
         // Create the about widget
         let about = About::default()
@@ -337,6 +338,20 @@ impl cosmic::Application for AppModel {
             pending: None,
             quitting: false,
         };
+
+        // If launched with a file path (e.g. via "Open with"), open it.
+        if let Some(path) = flags {
+            match std::fs::read_to_string(&path) {
+                Ok(contents) => {
+                    app.document.mode = Mode::View;
+                    app.load_contents(&contents);
+                    app.document.path = Some(path);
+                }
+                Err(why) => {
+                    app.error = Some(format!("failed to open {}: {why}", path.display()));
+                }
+            }
+        }
 
         // Create a startup command that sets the window title.
         let command = app.update_title();

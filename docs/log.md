@@ -29,6 +29,13 @@ Format for each entry:
 **Rationale:** `core.window.show_headerbar` is libcosmic's runtime flag for the header bar; flipping it re-renders without it. Since hiding the header also hides the menus and the mode toggle, the keyboard shortcut is essential to restore it.
 **Consequences:** Builds clean and pedantic-clippy-clean.
 
+## 2026-06-09 — Fix "Open with" / CLI file opening
+
+**Context:** "Open with" on a Markdown file didn't open the file. The desktop entry runs `cosmic-markdown %F`, but the app used `Flags = ()` and ignored argv, so it launched with an empty document.
+**Decision:** Read the first command-line argument in `main.rs` (`std::env::args_os().nth(1)`) and pass it as `Flags = Option<PathBuf>`; `init` reads the file and loads it in View mode. Added a best-effort `update-desktop-database` to the justfile `install`/`uninstall` so the `text/markdown` association registers.
+**Rationale:** The `single-instance` feature is enabled but unused (we call `cosmic::app::run`, not `run_single_instance`), so each launch is already its own process — reading argv is sufficient and avoids the DBus/`CosmicFlags`/`dbus_activation` machinery. Full single-instance forwarding (focus running instance + open file via `Details::Open`) is deferred.
+**Consequences:** Builds clean and pedantic-clippy-clean. Requires rebuild + reinstall to take effect. Each "Open with" opens a new window. Spec's open-with note corrected (no single-instance forwarding). If true single-instance is wanted later: switch to `run_single_instance`, implement `CosmicFlags` for the flags, and handle `dbus_activation`'s `Details::Open`.
+
 ## 2026-06-09 — Content zoom
 
 **Context:** User wants zooming with `Ctrl++` / `Ctrl+-`.

@@ -58,6 +58,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- "Open with" / command-line file opening now works: the file path passed by
+  the desktop entry (`Exec=... %F`) is read and opened on startup (previously it
+  was ignored, opening an empty window). `just install` now also runs
+  `update-desktop-database` so the app registers for `text/markdown` files.
 - Content margins: removed the scrollbar/content gap in the rendered View that
   made the right margin look larger than the others, and reduced the top margin
   when the header bar is shown (it was stacking with the header's own

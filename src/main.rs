@@ -18,6 +18,9 @@ fn main() -> cosmic::iced::Result {
             .min_height(180.0),
     );
 
-    // Starts the application's event loop with `()` as the application's flags.
-    cosmic::app::run::<app::AppModel>(settings, ())
+    // A file path may be passed on the command line (e.g. from "Open with").
+    let file = std::env::args_os().nth(1).map(std::path::PathBuf::from);
+
+    // Starts the application's event loop, opening `file` if provided.
+    cosmic::app::run::<app::AppModel>(settings, file)
 }

@@ -66,10 +66,13 @@ install:
     install -Dm0644 {{ 'resources' / desktop }} {{desktop-dst}}
     install -Dm0644 {{ 'resources' / appdata }} {{appdata-dst}}
     install -Dm0644 {{ 'resources' / 'icons' / 'hicolor' / 'scalable' / 'apps' / 'icon.svg' }} {{ icon-svg-dst / icon-svg }}
+    # Register MIME associations so the app appears in "Open with" (best-effort).
+    -update-desktop-database {{ base-dir / 'share' / 'applications' }}
 
 # Uninstalls installed files
 uninstall:
     rm {{bin-dst}} {{desktop-dst}} {{appdata-dst}} {{ icon-svg-dst / icon-svg }}
+    -update-desktop-database {{ base-dir / 'share' / 'applications' }}
 
 # Vendor dependencies locally
 vendor:
